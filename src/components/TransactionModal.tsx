@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Category, Transaction, TransactionType } from '../types'
+import type { Category, Transaction, TransactionType, Recurrence } from '../types'
+
+type Duration = '3m' | '6m' | '1y' | '2y'
+
+const DURATION_LABELS: Record<Duration, string> = {
+  '3m': '3 months',
+  '6m': '6 months',
+  '1y': '1 year',
+  '2y': '2 years',
+}
 
 interface Props {
   open: boolean
@@ -23,15 +32,60 @@ const FIELD = [
 
 const LABEL = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5'
 
+function computeOccurrenceCount(recurrence: Recurrence, startDate: string, duration: Duration): number {
+  const start = new Date(startDate + 'T00:00:00')
+  const end   = new Date(start)
+  if (duration === '3m')      end.setMonth(end.getMonth() + 3)
+  else if (duration === '6m') end.setMonth(end.getMonth() + 6)
+  else if (duration === '1y') end.setFullYear(end.getFullYear() + 1)
+  else                         end.setFullYear(end.getFullYear() + 2)
+
+  let count = 0
+  const cur = new Date(start)
+  while (cur <= end) {
+    count++
+    if (recurrence === 'weekly')       cur.setDate(cur.getDate() + 7)
+    else if (recurrence === 'monthly') cur.setMonth(cur.getMonth() + 1)
+    else                               cur.setFullYear(cur.getFullYear() + 1)
+  }
+  return count
+}
+
+function generateOccurrences(
+  base: { type: TransactionType; amount: number; category: string; note: string | null; recurrence: Recurrence },
+  startDate: string,
+  duration: Duration,
+  groupId: string,
+) {
+  const start = new Date(startDate + 'T00:00:00')
+  const end   = new Date(start)
+  if (duration === '3m')      end.setMonth(end.getMonth() + 3)
+  else if (duration === '6m') end.setMonth(end.getMonth() + 6)
+  else if (duration === '1y') end.setFullYear(end.getFullYear() + 1)
+  else                         end.setFullYear(end.getFullYear() + 2)
+
+  const rows = []
+  const cur = new Date(start)
+  while (cur <= end) {
+    rows.push({ ...base, date: cur.toISOString().split('T')[0], recurrence_group_id: groupId })
+    if (base.recurrence === 'weekly')       cur.setDate(cur.getDate() + 7)
+    else if (base.recurrence === 'monthly') cur.setMonth(cur.getMonth() + 1)
+    else                                    cur.setFullYear(cur.getFullYear() + 1)
+  }
+  return rows
+}
+
 export default function TransactionModal({ open, transaction, onClose, onSaved }: Props) {
   const isEditing = transaction !== null
   const today = new Date().toISOString().split('T')[0]
 
-  const [type, setType]         = useState<TransactionType>('expense')
-  const [amount, setAmount]     = useState('')
-  const [category, setCategory] = useState('')
-  const [date, setDate]         = useState(today)
-  const [note, setNote]         = useState('')
+  const [type, setType]             = useState<TransactionType>('expense')
+  const [amount, setAmount]         = useState('')
+  const [category, setCategory]     = useState('')
+  const [date, setDate]             = useState(today)
+  const [note, setNote]             = useState('')
+  const [recurrence, setRecurrence] = useState<Recurrence | null>(null)
+  const [duration, setDuration]     = useState<Duration>('1y')
 
   const [categories, setCategories] = useState<Category[]>([])
   const [submitting, setSubmitting] = useState(false)
@@ -46,12 +100,16 @@ export default function TransactionModal({ open, transaction, onClose, onSaved }
       setCategory(transaction.category)
       setDate(transaction.date)
       setNote(transaction.note ?? '')
+      setRecurrence(transaction.recurrence ?? null)
+      setDuration('1y')
     } else {
       setType('expense')
       setAmount('')
       setCategory('')
       setDate(today)
       setNote('')
+      setRecurrence(null)
+      setDuration('1y')
     }
     setError(null)
   }, [open, transaction])
@@ -79,6 +137,10 @@ export default function TransactionModal({ open, transaction, onClose, onSaved }
 
   const filteredCategories = categories.filter((c) => c.type === type)
 
+  const occurrenceCount = recurrence && date
+    ? computeOccurrenceCount(recurrence, date, duration)
+    : null
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
@@ -89,13 +151,27 @@ export default function TransactionModal({ open, transaction, onClose, onSaved }
 
     setSubmitting(true)
 
-    const payload = { type, amount: parsed, category, date, note: note.trim() || null }
-    const { error: dbError } = isEditing
-      ? await supabase.from('transactions').update(payload).eq('id', transaction.id)
-      : await supabase.from('transactions').insert(payload)
+    const base = { type, amount: parsed, category, note: note.trim() || null }
 
-    setSubmitting(false)
-    if (dbError) { setError(dbError.message); return }
+    if (isEditing) {
+      const { error: dbError } = await supabase
+        .from('transactions')
+        .update({ ...base, date })
+        .eq('id', transaction.id)
+      setSubmitting(false)
+      if (dbError) { setError(dbError.message); return }
+    } else if (recurrence) {
+      const groupId = crypto.randomUUID()
+      const rows = generateOccurrences({ ...base, recurrence }, date, duration, groupId)
+      const { error: dbError } = await supabase.from('transactions').insert(rows)
+      setSubmitting(false)
+      if (dbError) { setError(dbError.message); return }
+    } else {
+      const { error: dbError } = await supabase.from('transactions').insert({ ...base, date })
+      setSubmitting(false)
+      if (dbError) { setError(dbError.message); return }
+    }
+
     onSaved()
   }
 
@@ -187,7 +263,9 @@ export default function TransactionModal({ open, transaction, onClose, onSaved }
 
           {/* Date */}
           <div>
-            <label htmlFor="tx-date" className={LABEL}>Date</label>
+            <label htmlFor="tx-date" className={LABEL}>
+              {recurrence && !isEditing ? 'Start date' : 'Date'}
+            </label>
             <input
               id="tx-date"
               type="date"
@@ -197,6 +275,94 @@ export default function TransactionModal({ open, transaction, onClose, onSaved }
               required
             />
           </div>
+
+          {/* Recurring — new transactions only */}
+          {!isEditing && (
+            <div>
+              <div className="flex items-center justify-between">
+                <span className={LABEL} style={{ marginBottom: 0 }}>Recurring</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={Boolean(recurrence)}
+                  onClick={() => setRecurrence(recurrence ? null : 'monthly')}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    recurrence ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-700'
+                  }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    recurrence ? 'translate-x-6' : 'translate-x-1'
+                  }`} />
+                </button>
+              </div>
+
+              {recurrence && (
+                <div className="mt-3 space-y-3">
+                  {/* Frequency */}
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">Frequency</p>
+                    <div className="flex items-center gap-1.5">
+                      {(['weekly', 'monthly', 'annual'] as Recurrence[]).map((r) => (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => setRecurrence(r)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors ${
+                            recurrence === r
+                              ? 'bg-indigo-600 text-white'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                          }`}
+                        >
+                          {r}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Duration */}
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">Duration</p>
+                    <div className="flex items-center gap-1.5">
+                      {(['3m', '6m', '1y', '2y'] as Duration[]).map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setDuration(d)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                            duration === d
+                              ? 'bg-indigo-600 text-white'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                          }`}
+                        >
+                          {DURATION_LABELS[d]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Preview */}
+                  {occurrenceCount !== null && (
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      Creates {occurrenceCount} transaction{occurrenceCount !== 1 ? 's' : ''}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Recurring info when editing */}
+          {isEditing && transaction.recurrence && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900">
+              <svg className="w-3.5 h-3.5 text-indigo-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M17 1l4 4-4 4" /><path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                <path d="M7 23l-4-4 4-4" /><path d="M21 13v2a4 4 0 0 1-4 4H3" />
+              </svg>
+              <span className="text-xs text-indigo-700 dark:text-indigo-300 capitalize">
+                {transaction.recurrence} recurring — editing this occurrence only
+              </span>
+            </div>
+          )}
 
           {/* Note */}
           <div>
@@ -229,7 +395,13 @@ export default function TransactionModal({ open, transaction, onClose, onSaved }
               disabled={submitting}
               className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {submitting ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Transaction'}
+              {submitting
+                ? 'Saving…'
+                : isEditing
+                ? 'Save Changes'
+                : recurrence
+                ? `Create Recurring (${occurrenceCount ?? '…'}×)`
+                : 'Add Transaction'}
             </button>
           </div>
         </form>

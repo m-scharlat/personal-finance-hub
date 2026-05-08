@@ -11,7 +11,12 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 
-const currentYear = new Date().getFullYear()
+const now = new Date()
+const currentYear  = now.getFullYear()
+const currentMonth = now.getMonth() + 1
+const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+const lastMonthYear = lastMonthDate.getFullYear()
+const lastMonthNum  = lastMonthDate.getMonth() + 1
 const YEARS = Array.from({ length: currentYear - 2025 }, (_, i) => 2026 + i)
 const TYPES: TransactionType[] = ['income', 'expense', 'savings']
 
@@ -51,8 +56,8 @@ const TYPE_PILL_ON: Record<string, string> = {
 const TYPE_PILL_OFF =
   'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-700 dark:hover:bg-gray-800'
 
-const SELECT =
-  'text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
+const QUICK_ON  = 'bg-indigo-600 text-white border border-transparent'
+const QUICK_OFF = 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-700 dark:hover:bg-gray-800'
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -81,6 +86,45 @@ function TrashIcon() {
       <path d="M10 11v6M14 11v6" />
       <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
     </svg>
+  )
+}
+
+function FilterSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: number | null
+  onChange: (v: number | null) => void
+  options: { value: number; label: string }[]
+  placeholder: string
+}) {
+  const active = value !== null
+  return (
+    <div className="relative inline-flex">
+      <select
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+        className={`appearance-none text-sm pl-3 pr-7 py-1.5 rounded-lg border transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+          active
+            ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
+            : 'border-gray-200 bg-white text-gray-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400'
+        }`}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      <svg
+        className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400"
+        viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+      >
+        <polyline points="6 9 12 15 18 9" />
+      </svg>
+    </div>
   )
 }
 
@@ -240,7 +284,9 @@ export default function Tracker() {
   const [editingTx, setEditingTx]   = useState<Transaction | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const hasFilters = filterYear !== null || filterMonth !== null || filterType !== null
+  const hasFilters   = filterYear !== null || filterMonth !== null || filterType !== null
+  const isThisMonth  = filterYear === currentYear  && filterMonth === currentMonth
+  const isLastMonth  = filterYear === lastMonthYear && filterMonth === lastMonthNum
 
   useEffect(() => {
     let cancelled = false
@@ -300,13 +346,41 @@ export default function Tracker() {
     return { net: income - expense, savingsGroup }
   }, [transactions, aggregation, filterType])
 
+  // When no date filter: group recurring transactions so each series shows as one row
+  const recurringGroupMeta = useMemo(() => {
+    if (filterYear !== null || filterMonth !== null) return null
+    const map = new Map<string, number>()
+    for (const tx of transactions) {
+      if (tx.recurrence_group_id) {
+        map.set(tx.recurrence_group_id, (map.get(tx.recurrence_group_id) ?? 0) + 1)
+      }
+    }
+    return map.size > 0 ? map : null
+  }, [transactions, filterYear, filterMonth])
+
+  // One representative row per recurring group (most-recent occurrence, since sorted date desc)
+  const displayTransactions = useMemo(() => {
+    if (!recurringGroupMeta) return transactions
+    const seen = new Set<string>()
+    return transactions.filter((tx) => {
+      if (!tx.recurrence_group_id) return true
+      if (seen.has(tx.recurrence_group_id)) return false
+      seen.add(tx.recurrence_group_id)
+      return true
+    })
+  }, [transactions, recurringGroupMeta])
+
   function clearFilters() { setFilterYear(null); setFilterMonth(null); setFilterType(null) }
   function openAdd() { setEditingTx(null); setModalOpen(true) }
   function openEdit(tx: Transaction) { setDeletingId(null); setEditingTx(tx); setModalOpen(true) }
   function handleModalSaved() { setModalOpen(false); setEditingTx(null); setRefresh((r) => r + 1) }
 
-  async function handleDelete(id: string) {
-    const { error } = await supabase.from('transactions').delete().eq('id', id)
+  async function handleDelete(tx: Transaction, mode: 'single' | 'future' | 'all' = 'single') {
+    const q = supabase.from('transactions').delete()
+    const { error } =
+      mode === 'all'    && tx.recurrence_group_id ? await q.eq('recurrence_group_id', tx.recurrence_group_id) :
+      mode === 'future' && tx.recurrence_group_id ? await q.eq('recurrence_group_id', tx.recurrence_group_id).gte('date', tx.date) :
+                                                    await q.eq('id', tx.id)
     if (error) { setError(error.message); return }
     setDeletingId(null)
     setRefresh((r) => r + 1)
@@ -341,23 +415,57 @@ export default function Tracker() {
         )}
 
         {/* Filter bar */}
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <select value={filterYear ?? ''} onChange={(e) => setFilterYear(e.target.value ? Number(e.target.value) : null)} className={SELECT}>
-              <option value="">All Years</option>
-              {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
-            <select value={filterMonth ?? ''} onChange={(e) => setFilterMonth(e.target.value ? Number(e.target.value) : null)} className={SELECT}>
-              <option value="">All Months</option>
-              {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
-            </select>
-            {hasFilters && (
-              <button onClick={clearFilters} className="text-xs font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-                Clear
-              </button>
-            )}
+        <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
+          {/* Year + Month selects */}
+          <div className="flex items-center gap-2">
+            <FilterSelect
+              value={filterYear}
+              onChange={setFilterYear}
+              options={YEARS.map((y) => ({ value: y, label: String(y) }))}
+              placeholder="All Years"
+            />
+            <FilterSelect
+              value={filterMonth}
+              onChange={setFilterMonth}
+              options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
+              placeholder="All Months"
+            />
           </div>
-          <div className="flex items-center gap-1">
+
+          {/* Divider */}
+          <div className="h-4 w-px bg-gray-200 dark:bg-gray-700" />
+
+          {/* Quick filters */}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => { setFilterYear(currentYear); setFilterMonth(currentMonth) }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${isThisMonth ? QUICK_ON : QUICK_OFF}`}
+            >
+              This Month
+            </button>
+            <button
+              onClick={() => { setFilterYear(lastMonthYear); setFilterMonth(lastMonthNum) }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${isLastMonth ? QUICK_ON : QUICK_OFF}`}
+            >
+              Last Month
+            </button>
+          </div>
+
+          {/* Clear */}
+          {hasFilters && (
+            <button
+              onClick={clearFilters}
+              className="flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              Clear
+            </button>
+          )}
+
+          {/* Type pills */}
+          <div className="flex items-center gap-1 ml-auto">
             {([null, 'expense', 'income', 'savings'] as (TransactionType | null)[]).map((t) => {
               const key = t ?? 'all'
               return (
@@ -434,15 +542,31 @@ export default function Tracker() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                    {transactions.map((tx) =>
-                      deletingId === tx.id ? (
+                    {displayTransactions.map((tx) => {
+                      const isCollapsedGroup = Boolean(tx.recurrence_group_id && recurringGroupMeta)
+                      const groupCount = tx.recurrence_group_id ? recurringGroupMeta?.get(tx.recurrence_group_id) : undefined
+                      return deletingId === tx.id ? (
                         <tr key={tx.id} className="bg-red-50 dark:bg-red-950/20">
                           <td colSpan={6} className="py-3 px-5">
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-4 flex-wrap">
                               <span className="text-sm text-gray-600 dark:text-gray-400">
-                                Delete <span className="font-medium text-gray-900 dark:text-white">{tx.category}</span> — {formatCurrency(tx.amount)}?
+                                {isCollapsedGroup
+                                  ? <>Delete all <span className="font-medium text-gray-900 dark:text-white">{groupCount}</span> occurrences of <span className="font-medium text-gray-900 dark:text-white">{tx.category}</span>?</>
+                                  : tx.recurrence
+                                  ? <>Delete <span className="font-medium text-gray-900 dark:text-white capitalize">{tx.recurrence}</span> recurring — {formatCurrency(tx.amount)}?</>
+                                  : <>Delete <span className="font-medium text-gray-900 dark:text-white">{tx.category}</span> — {formatCurrency(tx.amount)}?</>
+                                }
                               </span>
-                              <button onClick={() => handleDelete(tx.id)} className="text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300">Delete</button>
+                              {isCollapsedGroup ? (
+                                <button onClick={() => handleDelete(tx, 'all')} className="text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300">Delete all</button>
+                              ) : tx.recurrence ? (
+                                <>
+                                  <button onClick={() => handleDelete(tx, 'single')} className="text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300">This only</button>
+                                  <button onClick={() => handleDelete(tx, 'future')} className="text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300">This &amp; future</button>
+                                </>
+                              ) : (
+                                <button onClick={() => handleDelete(tx)} className="text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300">Delete</button>
+                              )}
                               <button onClick={() => setDeletingId(null)} className="text-xs font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Cancel</button>
                             </div>
                           </td>
@@ -451,7 +575,21 @@ export default function Tracker() {
                         <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors group">
                           <td className="py-3 px-5 text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDate(tx.date)}</td>
                           <td className="py-3 px-4"><TypeBadge type={tx.type} /></td>
-                          <td className="py-3 px-4 text-gray-900 dark:text-white">{tx.category}</td>
+                          <td className="py-3 px-4 text-gray-900 dark:text-white">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {tx.category}
+                              {tx.recurrence && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-500 dark:bg-indigo-950/60 dark:text-indigo-400 capitalize whitespace-nowrap">
+                                  ↻ {tx.recurrence}
+                                </span>
+                              )}
+                              {isCollapsedGroup && groupCount && groupCount > 1 && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 whitespace-nowrap">
+                                  ×{groupCount}
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td className={`py-3 px-4 text-right font-medium tabular-nums whitespace-nowrap ${AMOUNT_COLOR[tx.type]}`}>{formatCurrency(tx.amount)}</td>
                           <td className="py-3 px-4 text-gray-500 dark:text-gray-400 hidden sm:table-cell">
                             {tx.note ? <span className="block max-w-xs truncate">{tx.note}</span> : <span className="text-gray-300 dark:text-gray-600">—</span>}
@@ -464,7 +602,7 @@ export default function Tracker() {
                           </td>
                         </tr>
                       )
-                    )}
+                    })}
                   </tbody>
                 </table>
               </div>

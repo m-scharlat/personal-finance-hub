@@ -1,4 +1,5 @@
 export type TransactionType = 'expense' | 'income' | 'savings'
+export type Recurrence = 'weekly' | 'monthly' | 'annual'
 
 export interface Transaction {
   id: string
@@ -10,6 +11,8 @@ export interface Transaction {
   created_at: string
   year: number
   month: number
+  recurrence: Recurrence | null
+  recurrence_group_id: string | null
 }
 
 export interface Category {
