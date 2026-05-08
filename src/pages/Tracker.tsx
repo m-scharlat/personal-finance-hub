@@ -19,9 +19,14 @@ const TYPES: TransactionType[] = ['income', 'expense', 'savings']
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type ViewMode = 'transactions' | 'summary'
+type ViewMode  = 'transactions' | 'summary'
+type SortCol   = 'date' | 'type' | 'category' | 'amount'
+type SortDir   = 'asc' | 'desc'
+interface SortState { col: SortCol; dir: SortDir }
 interface AggRow   { category: string; amount: number }
 interface AggGroup { type: TransactionType; total: number; rows: AggRow[] }
+
+const TYPE_ORDER: Record<TransactionType, number> = { income: 0, expense: 1, savings: 2 }
 
 // ── Styles ───────────────────────────────────────────────────────────────────
 
@@ -57,6 +62,16 @@ const QUICK_ON  = 'bg-indigo-600 text-white border border-transparent'
 const QUICK_OFF = 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-700 dark:hover:bg-gray-800'
 
 // ── Sub-components ────────────────────────────────────────────────────────────
+
+function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"
+      className={active ? 'text-indigo-500 dark:text-indigo-400' : 'text-gray-300 dark:text-gray-600'}>
+      <path d="M5 1L8 4H2L5 1Z" fill={active && dir === 'asc' ? 'currentColor' : 'currentColor'} fillOpacity={active && dir === 'asc' ? 1 : 0.35} />
+      <path d="M5 9L2 6H8L5 9Z" fill={active && dir === 'desc' ? 'currentColor' : 'currentColor'} fillOpacity={active && dir === 'desc' ? 1 : 0.35} />
+    </svg>
+  )
+}
 
 function TypeBadge({ type }: { type: TransactionType }) {
   return (
@@ -277,6 +292,8 @@ export default function Tracker() {
   const [filterMonth, setFilterMonth] = useState<number | null>(null)
   const [filterType, setFilterType]   = useState<TransactionType | null>(null)
 
+  const [sort, setSort] = useState<SortState>({ col: 'date', dir: 'desc' })
+
   const [modalOpen, setModalOpen]           = useState(false)
   const [editingTx, setEditingTx]           = useState<Transaction | null>(null)
   const [deletingId, setDeletingId]         = useState<string | null>(null)
@@ -363,18 +380,41 @@ export default function Tracker() {
   }, [transactions, filterYear, filterMonth])
 
   const displayTransactions = useMemo(() => {
-    if (!groupMeta) return transactions
-    const seen = new Set<string>()
-    return transactions.filter((tx) => {
-      const groupId = tx.recurrence_group_id ?? tx.split_group_id
-      if (!groupId) return true
-      if (seen.has(groupId)) return false
-      seen.add(groupId)
-      return true
+    let rows = transactions
+    if (groupMeta) {
+      const seen = new Set<string>()
+      rows = transactions.filter((tx) => {
+        const groupId = tx.recurrence_group_id ?? tx.split_group_id
+        if (!groupId) return true
+        if (seen.has(groupId)) return false
+        seen.add(groupId)
+        return true
+      })
+    }
+    const { col, dir } = sort
+    const mul = dir === 'asc' ? 1 : -1
+    return [...rows].sort((a, b) => {
+      if (col === 'date')     return mul * a.date.localeCompare(b.date)
+      if (col === 'type')     return mul * (TYPE_ORDER[a.type] - TYPE_ORDER[b.type])
+      if (col === 'category') return mul * a.category.localeCompare(b.category)
+      if (col === 'amount') {
+        const aAmt = (groupMeta?.get(a.recurrence_group_id ?? a.split_group_id ?? '')?.totalAmount) ?? a.amount
+        const bAmt = (groupMeta?.get(b.recurrence_group_id ?? b.split_group_id ?? '')?.totalAmount) ?? b.amount
+        return mul * (aAmt - bAmt)
+      }
+      return 0
     })
-  }, [transactions, groupMeta])
+  }, [transactions, groupMeta, sort])
 
   function clearFilters() { setFilterYear(null); setFilterMonth(null); setFilterType(null) }
+
+  function handleSort(col: SortCol) {
+    setSort((prev) =>
+      prev.col === col
+        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: col === 'date' || col === 'amount' ? 'desc' : 'asc' },
+    )
+  }
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
@@ -468,18 +508,24 @@ export default function Tracker() {
         <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
           {/* Year + Month selects with prev/next month arrows */}
           <div className="flex items-center gap-2">
-            <FilterSelect
-              value={filterYear}
-              onChange={setFilterYear}
-              options={YEARS.map((y) => ({ value: y, label: String(y) }))}
-              placeholder="All Years"
-            />
-            <FilterSelect
-              value={filterMonth}
-              onChange={setFilterMonth}
-              options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
-              placeholder="All Months"
-            />
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-medium text-gray-400 dark:text-gray-500">Year</span>
+              <FilterSelect
+                value={filterYear}
+                onChange={setFilterYear}
+                options={YEARS.map((y) => ({ value: y, label: String(y) }))}
+                placeholder="All"
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-medium text-gray-400 dark:text-gray-500">Month</span>
+              <FilterSelect
+                value={filterMonth}
+                onChange={setFilterMonth}
+                options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
+                placeholder="All"
+              />
+            </div>
             <div className="flex items-center">
               <button
                 onClick={() => stepMonth(-1)}
@@ -668,10 +714,20 @@ export default function Tracker() {
                           />
                         </th>
                       )}
-                      <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Date</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400">Type</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400">Category</th>
-                      <th className="text-right py-3 px-4 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Amount</th>
+                      {(['date', 'type', 'category'] as SortCol[]).map((col) => (
+                        <th key={col} className={`text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap`}>
+                          <button onClick={() => handleSort(col)} className="inline-flex items-center gap-1 hover:text-gray-900 dark:hover:text-white transition-colors capitalize">
+                            {col}
+                            <SortIcon active={sort.col === col} dir={sort.dir} />
+                          </button>
+                        </th>
+                      ))}
+                      <th className="text-right py-3 px-4 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                        <button onClick={() => handleSort('amount')} className="inline-flex items-center gap-1 hover:text-gray-900 dark:hover:text-white transition-colors ml-auto">
+                          Amount
+                          <SortIcon active={sort.col === 'amount'} dir={sort.dir} />
+                        </button>
+                      </th>
                       <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400 hidden sm:table-cell">Note</th>
                       <th className="py-3 px-4 w-px" />
                     </tr>

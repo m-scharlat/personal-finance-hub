@@ -169,7 +169,7 @@ export default function ImportMappings() {
             <TagInput
               tags={triggers}
               onChange={setTriggers}
-              placeholder="e.g. hhp, HHP, Hebrew Homepage"
+              placeholder="e.g. netflix, NFLX, Netflix Inc"
             />
           </div>
           <div className="flex items-end gap-3">
