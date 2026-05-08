@@ -13,6 +13,7 @@ export interface Transaction {
   month: number
   recurrence: Recurrence | null
   recurrence_group_id: string | null
+  split_group_id: string | null
 }
 
 export interface Category {

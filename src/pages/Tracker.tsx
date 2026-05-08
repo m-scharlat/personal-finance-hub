@@ -14,9 +14,6 @@ const MONTHS = [
 const now = new Date()
 const currentYear  = now.getFullYear()
 const currentMonth = now.getMonth() + 1
-const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-const lastMonthYear = lastMonthDate.getFullYear()
-const lastMonthNum  = lastMonthDate.getMonth() + 1
 const YEARS = Array.from({ length: currentYear - 2025 }, (_, i) => 2026 + i)
 const TYPES: TransactionType[] = ['income', 'expense', 'savings']
 
@@ -285,8 +282,7 @@ export default function Tracker() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const hasFilters   = filterYear !== null || filterMonth !== null || filterType !== null
-  const isThisMonth  = filterYear === currentYear  && filterMonth === currentMonth
-  const isLastMonth  = filterYear === lastMonthYear && filterMonth === lastMonthNum
+  const isThisMonth = filterYear === currentYear && filterMonth === currentMonth
 
   useEffect(() => {
     let cancelled = false
@@ -346,41 +342,64 @@ export default function Tracker() {
     return { net: income - expense, savingsGroup }
   }, [transactions, aggregation, filterType])
 
-  // When no date filter: group recurring transactions so each series shows as one row
-  const recurringGroupMeta = useMemo(() => {
+  // When no date filter: collapse recurring + split groups to one representative row each
+  interface GroupMeta { count: number; totalAmount: number; isSplit: boolean }
+  const groupMeta = useMemo(() => {
     if (filterYear !== null || filterMonth !== null) return null
-    const map = new Map<string, number>()
+    const map = new Map<string, GroupMeta>()
     for (const tx of transactions) {
-      if (tx.recurrence_group_id) {
-        map.set(tx.recurrence_group_id, (map.get(tx.recurrence_group_id) ?? 0) + 1)
-      }
+      const groupId = tx.recurrence_group_id ?? tx.split_group_id
+      if (!groupId) continue
+      const existing = map.get(groupId)
+      if (existing) { existing.count++; existing.totalAmount += tx.amount }
+      else map.set(groupId, { count: 1, totalAmount: tx.amount, isSplit: Boolean(tx.split_group_id) })
     }
     return map.size > 0 ? map : null
   }, [transactions, filterYear, filterMonth])
 
-  // One representative row per recurring group (most-recent occurrence, since sorted date desc)
   const displayTransactions = useMemo(() => {
-    if (!recurringGroupMeta) return transactions
+    if (!groupMeta) return transactions
     const seen = new Set<string>()
     return transactions.filter((tx) => {
-      if (!tx.recurrence_group_id) return true
-      if (seen.has(tx.recurrence_group_id)) return false
-      seen.add(tx.recurrence_group_id)
+      const groupId = tx.recurrence_group_id ?? tx.split_group_id
+      if (!groupId) return true
+      if (seen.has(groupId)) return false
+      seen.add(groupId)
       return true
     })
-  }, [transactions, recurringGroupMeta])
+  }, [transactions, groupMeta])
 
   function clearFilters() { setFilterYear(null); setFilterMonth(null); setFilterType(null) }
+
+  function stepMonth(dir: 1 | -1) {
+    const baseYear  = filterYear  ?? currentYear
+    const baseMonth = filterMonth ?? currentMonth
+    let m = baseMonth + dir
+    let y = baseYear
+    if (m > 12) { m = 1;  y++ }
+    if (m < 1)  { m = 12; y-- }
+    setFilterYear(y)
+    setFilterMonth(m)
+  }
   function openAdd() { setEditingTx(null); setModalOpen(true) }
   function openEdit(tx: Transaction) { setDeletingId(null); setEditingTx(tx); setModalOpen(true) }
   function handleModalSaved() { setModalOpen(false); setEditingTx(null); setRefresh((r) => r + 1) }
 
   async function handleDelete(tx: Transaction, mode: 'single' | 'future' | 'all' = 'single') {
     const q = supabase.from('transactions').delete()
-    const { error } =
-      mode === 'all'    && tx.recurrence_group_id ? await q.eq('recurrence_group_id', tx.recurrence_group_id) :
-      mode === 'future' && tx.recurrence_group_id ? await q.eq('recurrence_group_id', tx.recurrence_group_id).gte('date', tx.date) :
-                                                    await q.eq('id', tx.id)
+    let result
+    if (mode === 'all') {
+      if (tx.recurrence_group_id)   result = await q.eq('recurrence_group_id', tx.recurrence_group_id)
+      else if (tx.split_group_id)   result = await q.eq('split_group_id', tx.split_group_id)
+      else                          result = await q.eq('id', tx.id)
+    } else if (mode === 'future') {
+      if (tx.recurrence_group_id)   result = await q.eq('recurrence_group_id', tx.recurrence_group_id).gte('date', tx.date)
+      else if (tx.split_group_id)   result = await q.eq('split_group_id', tx.split_group_id).gte('date', tx.date)
+      else                          result = await q.eq('id', tx.id)
+    } else {
+      result = await q.eq('id', tx.id)
+    }
+    const { error } = result
     if (error) { setError(error.message); return }
     setDeletingId(null)
     setRefresh((r) => r + 1)
@@ -416,7 +435,7 @@ export default function Tracker() {
 
         {/* Filter bar */}
         <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
-          {/* Year + Month selects */}
+          {/* Year + Month selects with prev/next month arrows */}
           <div className="flex items-center gap-2">
             <FilterSelect
               value={filterYear}
@@ -430,6 +449,26 @@ export default function Tracker() {
               options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
               placeholder="All Months"
             />
+            <div className="flex items-center">
+              <button
+                onClick={() => stepMonth(-1)}
+                aria-label="Previous month"
+                className="p-1.5 rounded-l-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-gray-200 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </button>
+              <button
+                onClick={() => stepMonth(1)}
+                aria-label="Next month"
+                className="p-1.5 rounded-r-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-gray-200 dark:hover:bg-gray-800 border border-l-0 border-gray-200 dark:border-gray-700 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {/* Divider */}
@@ -438,16 +477,22 @@ export default function Tracker() {
           {/* Quick filters */}
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => { setFilterYear(currentYear); setFilterMonth(currentMonth) }}
+              onClick={() => {
+                if (filterYear === currentYear && filterMonth === null) setFilterYear(null)
+                else { setFilterYear(currentYear); setFilterMonth(null) }
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterYear === currentYear && filterMonth === null ? QUICK_ON : QUICK_OFF}`}
+            >
+              This Year
+            </button>
+            <button
+              onClick={() => {
+                if (isThisMonth) clearFilters()
+                else { setFilterYear(currentYear); setFilterMonth(currentMonth) }
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${isThisMonth ? QUICK_ON : QUICK_OFF}`}
             >
               This Month
-            </button>
-            <button
-              onClick={() => { setFilterYear(lastMonthYear); setFilterMonth(lastMonthNum) }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${isLastMonth ? QUICK_ON : QUICK_OFF}`}
-            >
-              Last Month
             </button>
           </div>
 
@@ -543,29 +588,36 @@ export default function Tracker() {
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                     {displayTransactions.map((tx) => {
-                      const isCollapsedGroup = Boolean(tx.recurrence_group_id && recurringGroupMeta)
-                      const groupCount = tx.recurrence_group_id ? recurringGroupMeta?.get(tx.recurrence_group_id) : undefined
+                      const txGroupId       = tx.recurrence_group_id ?? tx.split_group_id
+                      const meta            = txGroupId ? groupMeta?.get(txGroupId) : undefined
+                      const isCollapsed     = Boolean(meta)
+                      const displayAmount   = meta?.isSplit ? meta.totalAmount : tx.amount
+                      const btnDel = 'text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300'
                       return deletingId === tx.id ? (
                         <tr key={tx.id} className="bg-red-50 dark:bg-red-950/20">
                           <td colSpan={6} className="py-3 px-5">
                             <div className="flex items-center gap-4 flex-wrap">
                               <span className="text-sm text-gray-600 dark:text-gray-400">
-                                {isCollapsedGroup
-                                  ? <>Delete all <span className="font-medium text-gray-900 dark:text-white">{groupCount}</span> occurrences of <span className="font-medium text-gray-900 dark:text-white">{tx.category}</span>?</>
+                                {isCollapsed && meta?.isSplit
+                                  ? <>Delete all <span className="font-medium text-gray-900 dark:text-white">{meta.count}</span> installments of <span className="font-medium text-gray-900 dark:text-white">{tx.category}</span> ({formatCurrency(meta.totalAmount)} total)?</>
+                                  : isCollapsed
+                                  ? <>Delete all <span className="font-medium text-gray-900 dark:text-white">{meta?.count}</span> occurrences of <span className="font-medium text-gray-900 dark:text-white">{tx.category}</span>?</>
                                   : tx.recurrence
                                   ? <>Delete <span className="font-medium text-gray-900 dark:text-white capitalize">{tx.recurrence}</span> recurring — {formatCurrency(tx.amount)}?</>
+                                  : tx.split_group_id
+                                  ? <>Delete this installment of <span className="font-medium text-gray-900 dark:text-white">{tx.category}</span> — {formatCurrency(tx.amount)}?</>
                                   : <>Delete <span className="font-medium text-gray-900 dark:text-white">{tx.category}</span> — {formatCurrency(tx.amount)}?</>
                                 }
                               </span>
-                              {isCollapsedGroup ? (
-                                <button onClick={() => handleDelete(tx, 'all')} className="text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300">Delete all</button>
-                              ) : tx.recurrence ? (
+                              {isCollapsed ? (
+                                <button onClick={() => handleDelete(tx, 'all')} className={btnDel}>Delete all</button>
+                              ) : (tx.recurrence || tx.split_group_id) ? (
                                 <>
-                                  <button onClick={() => handleDelete(tx, 'single')} className="text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300">This only</button>
-                                  <button onClick={() => handleDelete(tx, 'future')} className="text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300">This &amp; future</button>
+                                  <button onClick={() => handleDelete(tx, 'single')} className={btnDel}>This only</button>
+                                  <button onClick={() => handleDelete(tx, 'future')} className={btnDel}>This &amp; future</button>
                                 </>
                               ) : (
-                                <button onClick={() => handleDelete(tx)} className="text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300">Delete</button>
+                                <button onClick={() => handleDelete(tx)} className={btnDel}>Delete</button>
                               )}
                               <button onClick={() => setDeletingId(null)} className="text-xs font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Cancel</button>
                             </div>
@@ -583,14 +635,21 @@ export default function Tracker() {
                                   ↻ {tx.recurrence}
                                 </span>
                               )}
-                              {isCollapsedGroup && groupCount && groupCount > 1 && (
+                              {tx.split_group_id && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-500 dark:bg-violet-950/60 dark:text-violet-400 whitespace-nowrap">
+                                  ÷ {meta ? `${meta.count}mo` : 'spread'}
+                                </span>
+                              )}
+                              {isCollapsed && !meta?.isSplit && meta && meta.count > 1 && (
                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 whitespace-nowrap">
-                                  ×{groupCount}
+                                  ×{meta.count}
                                 </span>
                               )}
                             </div>
                           </td>
-                          <td className={`py-3 px-4 text-right font-medium tabular-nums whitespace-nowrap ${AMOUNT_COLOR[tx.type]}`}>{formatCurrency(tx.amount)}</td>
+                          <td className={`py-3 px-4 text-right font-medium tabular-nums whitespace-nowrap ${AMOUNT_COLOR[tx.type]}`}>
+                            {formatCurrency(displayAmount)}
+                          </td>
                           <td className="py-3 px-4 text-gray-500 dark:text-gray-400 hidden sm:table-cell">
                             {tx.note ? <span className="block max-w-xs truncate">{tx.note}</span> : <span className="text-gray-300 dark:text-gray-600">—</span>}
                           </td>
