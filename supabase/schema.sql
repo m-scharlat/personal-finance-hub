@@ -1,0 +1,75 @@
+-- ============================================================
+-- Personal Finance Tracker — Supabase Schema
+-- Run this in the Supabase SQL editor for your project.
+-- ============================================================
+
+-- transactions table
+CREATE TABLE IF NOT EXISTS transactions (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  type        TEXT        NOT NULL CHECK (type IN ('expense', 'income', 'savings')),
+  amount      NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
+  category    TEXT        NOT NULL,
+  date        DATE        NOT NULL,
+  note        TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- Generated columns for efficient year/month filtering
+  year        INTEGER     GENERATED ALWAYS AS (EXTRACT(YEAR  FROM date)::INTEGER) STORED,
+  month       INTEGER     GENERATED ALWAYS AS (EXTRACT(MONTH FROM date)::INTEGER) STORED
+);
+
+CREATE INDEX IF NOT EXISTS transactions_year_month_idx ON transactions (year, month);
+CREATE INDEX IF NOT EXISTS transactions_type_idx        ON transactions (type);
+CREATE INDEX IF NOT EXISTS transactions_date_idx        ON transactions (date DESC);
+
+-- categories table
+CREATE TABLE IF NOT EXISTS categories (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  type        TEXT        NOT NULL CHECK (type IN ('expense', 'income', 'savings')),
+  name        TEXT        NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (type, name)
+);
+
+-- ============================================================
+-- Seed: default categories
+-- ============================================================
+INSERT INTO categories (type, name) VALUES
+  -- Expenses
+  ('expense', 'Food & Dining'),
+  ('expense', 'Rent & Housing'),
+  ('expense', 'Transport'),
+  ('expense', 'Utilities'),
+  ('expense', 'Entertainment'),
+  ('expense', 'Healthcare'),
+  ('expense', 'Shopping'),
+  ('expense', 'Education'),
+  ('expense', 'Subscriptions'),
+  ('expense', 'Other'),
+  -- Income
+  ('income', 'Salary'),
+  ('income', 'Freelance'),
+  ('income', 'Dividends'),
+  ('income', 'Rental Income'),
+  ('income', 'Bonus'),
+  ('income', 'Other Income'),
+  -- Savings
+  ('savings', 'Emergency Fund'),
+  ('savings', 'Investments'),
+  ('savings', 'Holiday'),
+  ('savings', 'Retirement'),
+  ('savings', 'Other Savings')
+ON CONFLICT (type, name) DO NOTHING;
+
+-- ============================================================
+-- Row Level Security
+-- No auth yet — allow all operations via the anon key.
+-- Tighten these policies when auth is added.
+-- ============================================================
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE categories   ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "anon_all_transactions" ON transactions
+  FOR ALL USING (true) WITH CHECK (true);
+
+CREATE POLICY "anon_all_categories" ON categories
+  FOR ALL USING (true) WITH CHECK (true);
