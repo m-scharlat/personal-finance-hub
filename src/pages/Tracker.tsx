@@ -122,11 +122,9 @@ function SummaryGroup({ group }: { group: AggGroup }) {
 function NetSavingsCard({
   netAmount,
   savingsGroup,
-  onClearFilter,
 }: {
   netAmount: number
   savingsGroup: AggGroup | null
-  onClearFilter: () => void
 }) {
   const isDeficit = netAmount < 0
   const totalAllocated = savingsGroup?.total ?? 0
@@ -512,7 +510,6 @@ export default function Tracker() {
                   <NetSavingsCard
                     netAmount={netSavings.net}
                     savingsGroup={netSavings.savingsGroup}
-                    onClearFilter={clearFilters}
                   />
                 )}
 
