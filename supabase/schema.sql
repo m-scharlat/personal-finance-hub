@@ -73,3 +73,20 @@ CREATE POLICY "anon_all_transactions" ON transactions
 
 CREATE POLICY "anon_all_categories" ON categories
   FOR ALL USING (true) WITH CHECK (true);
+
+-- ============================================================
+-- Migration: recurring transactions
+-- Run in the Supabase SQL editor after the initial schema.
+-- ============================================================
+ALTER TABLE transactions
+  ADD COLUMN IF NOT EXISTS recurrence          TEXT CHECK (recurrence IN ('weekly', 'monthly', 'annual')),
+  ADD COLUMN IF NOT EXISTS recurrence_group_id UUID,
+  ADD COLUMN IF NOT EXISTS split_group_id      UUID;
+
+CREATE INDEX IF NOT EXISTS transactions_recurrence_group_idx
+  ON transactions (recurrence_group_id)
+  WHERE recurrence_group_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS transactions_split_group_idx
+  ON transactions (split_group_id)
+  WHERE split_group_id IS NOT NULL;

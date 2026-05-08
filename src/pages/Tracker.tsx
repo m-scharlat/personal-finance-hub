@@ -11,7 +11,9 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 
-const currentYear = new Date().getFullYear()
+const now = new Date()
+const currentYear  = now.getFullYear()
+const currentMonth = now.getMonth() + 1
 const YEARS = Array.from({ length: currentYear - 2025 }, (_, i) => 2026 + i)
 const TYPES: TransactionType[] = ['income', 'expense', 'savings']
 
@@ -51,8 +53,8 @@ const TYPE_PILL_ON: Record<string, string> = {
 const TYPE_PILL_OFF =
   'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-700 dark:hover:bg-gray-800'
 
-const SELECT =
-  'text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
+const QUICK_ON  = 'bg-indigo-600 text-white border border-transparent'
+const QUICK_OFF = 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-700 dark:hover:bg-gray-800'
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -81,6 +83,45 @@ function TrashIcon() {
       <path d="M10 11v6M14 11v6" />
       <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
     </svg>
+  )
+}
+
+function FilterSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: number | null
+  onChange: (v: number | null) => void
+  options: { value: number; label: string }[]
+  placeholder: string
+}) {
+  const active = value !== null
+  return (
+    <div className="relative inline-flex">
+      <select
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+        className={`appearance-none text-sm pl-3 pr-7 py-1.5 rounded-lg border transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+          active
+            ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
+            : 'border-gray-200 bg-white text-gray-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400'
+        }`}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      <svg
+        className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400"
+        viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+      >
+        <polyline points="6 9 12 15 18 9" />
+      </svg>
+    </div>
   )
 }
 
@@ -236,11 +277,15 @@ export default function Tracker() {
   const [filterMonth, setFilterMonth] = useState<number | null>(null)
   const [filterType, setFilterType]   = useState<TransactionType | null>(null)
 
-  const [modalOpen, setModalOpen]   = useState(false)
-  const [editingTx, setEditingTx]   = useState<Transaction | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [modalOpen, setModalOpen]           = useState(false)
+  const [editingTx, setEditingTx]           = useState<Transaction | null>(null)
+  const [deletingId, setDeletingId]         = useState<string | null>(null)
+  const [selectedIds, setSelectedIds]       = useState<Set<string>>(new Set())
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [selectMode, setSelectMode]         = useState(false)
 
-  const hasFilters = filterYear !== null || filterMonth !== null || filterType !== null
+  const hasFilters   = filterYear !== null || filterMonth !== null || filterType !== null
+  const isThisMonth = filterYear === currentYear && filterMonth === currentMonth
 
   useEffect(() => {
     let cancelled = false
@@ -265,6 +310,8 @@ export default function Tracker() {
     load()
     return () => { cancelled = true }
   }, [filterYear, filterMonth, filterType, refresh])
+
+  useEffect(() => { setSelectedIds(new Set()); setConfirmBulkDelete(false); setSelectMode(false) }, [filterYear, filterMonth, filterType])
 
   // Per-type aggregation (income + expense only for cards; savings lives in Net Savings)
   const aggregation = useMemo<AggGroup[]>(() => {
@@ -300,13 +347,90 @@ export default function Tracker() {
     return { net: income - expense, savingsGroup }
   }, [transactions, aggregation, filterType])
 
+  // When no date filter: collapse recurring + split groups to one representative row each
+  interface GroupMeta { count: number; totalAmount: number; isSplit: boolean }
+  const groupMeta = useMemo(() => {
+    if (filterYear !== null || filterMonth !== null) return null
+    const map = new Map<string, GroupMeta>()
+    for (const tx of transactions) {
+      const groupId = tx.recurrence_group_id ?? tx.split_group_id
+      if (!groupId) continue
+      const existing = map.get(groupId)
+      if (existing) { existing.count++; existing.totalAmount += tx.amount }
+      else map.set(groupId, { count: 1, totalAmount: tx.amount, isSplit: Boolean(tx.split_group_id) })
+    }
+    return map.size > 0 ? map : null
+  }, [transactions, filterYear, filterMonth])
+
+  const displayTransactions = useMemo(() => {
+    if (!groupMeta) return transactions
+    const seen = new Set<string>()
+    return transactions.filter((tx) => {
+      const groupId = tx.recurrence_group_id ?? tx.split_group_id
+      if (!groupId) return true
+      if (seen.has(groupId)) return false
+      seen.add(groupId)
+      return true
+    })
+  }, [transactions, groupMeta])
+
   function clearFilters() { setFilterYear(null); setFilterMonth(null); setFilterType(null) }
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds(
+      selectedIds.size === displayTransactions.length
+        ? new Set()
+        : new Set(displayTransactions.map((tx) => tx.id)),
+    )
+  }
+
+  async function handleBulkDelete() {
+    if (selectedIds.size === 0) return
+    const { error } = await supabase.from('transactions').delete().in('id', Array.from(selectedIds))
+    if (error) { setError(error.message); return }
+    setSelectedIds(new Set())
+    setConfirmBulkDelete(false)
+    setRefresh((r) => r + 1)
+  }
+
+  function stepMonth(dir: 1 | -1) {
+    const baseYear  = filterYear  ?? currentYear
+    const baseMonth = filterMonth ?? currentMonth
+    let m = baseMonth + dir
+    let y = baseYear
+    if (m > 12) { m = 1;  y++ }
+    if (m < 1)  { m = 12; y-- }
+    setFilterYear(y)
+    setFilterMonth(m)
+  }
   function openAdd() { setEditingTx(null); setModalOpen(true) }
   function openEdit(tx: Transaction) { setDeletingId(null); setEditingTx(tx); setModalOpen(true) }
   function handleModalSaved() { setModalOpen(false); setEditingTx(null); setRefresh((r) => r + 1) }
 
-  async function handleDelete(id: string) {
-    const { error } = await supabase.from('transactions').delete().eq('id', id)
+  async function handleDelete(tx: Transaction, mode: 'single' | 'future' | 'all' = 'single') {
+    const q = supabase.from('transactions').delete()
+    let result
+    if (mode === 'all') {
+      if (tx.recurrence_group_id)   result = await q.eq('recurrence_group_id', tx.recurrence_group_id)
+      else if (tx.split_group_id)   result = await q.eq('split_group_id', tx.split_group_id)
+      else                          result = await q.eq('id', tx.id)
+    } else if (mode === 'future') {
+      if (tx.recurrence_group_id)   result = await q.eq('recurrence_group_id', tx.recurrence_group_id).gte('date', tx.date)
+      else if (tx.split_group_id)   result = await q.eq('split_group_id', tx.split_group_id).gte('date', tx.date)
+      else                          result = await q.eq('id', tx.id)
+    } else {
+      result = await q.eq('id', tx.id)
+    }
+    const { error } = result
     if (error) { setError(error.message); return }
     setDeletingId(null)
     setRefresh((r) => r + 1)
@@ -341,23 +465,83 @@ export default function Tracker() {
         )}
 
         {/* Filter bar */}
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <select value={filterYear ?? ''} onChange={(e) => setFilterYear(e.target.value ? Number(e.target.value) : null)} className={SELECT}>
-              <option value="">All Years</option>
-              {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
-            <select value={filterMonth ?? ''} onChange={(e) => setFilterMonth(e.target.value ? Number(e.target.value) : null)} className={SELECT}>
-              <option value="">All Months</option>
-              {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
-            </select>
-            {hasFilters && (
-              <button onClick={clearFilters} className="text-xs font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-                Clear
+        <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
+          {/* Year + Month selects with prev/next month arrows */}
+          <div className="flex items-center gap-2">
+            <FilterSelect
+              value={filterYear}
+              onChange={setFilterYear}
+              options={YEARS.map((y) => ({ value: y, label: String(y) }))}
+              placeholder="All Years"
+            />
+            <FilterSelect
+              value={filterMonth}
+              onChange={setFilterMonth}
+              options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
+              placeholder="All Months"
+            />
+            <div className="flex items-center">
+              <button
+                onClick={() => stepMonth(-1)}
+                aria-label="Previous month"
+                className="p-1.5 rounded-l-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-gray-200 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
               </button>
-            )}
+              <button
+                onClick={() => stepMonth(1)}
+                aria-label="Next month"
+                className="p-1.5 rounded-r-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-gray-200 dark:hover:bg-gray-800 border border-l-0 border-gray-200 dark:border-gray-700 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
+
+          {/* Divider */}
+          <div className="h-4 w-px bg-gray-200 dark:bg-gray-700" />
+
+          {/* Quick filters */}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => {
+                if (filterYear === currentYear && filterMonth === null) setFilterYear(null)
+                else { setFilterYear(currentYear); setFilterMonth(null) }
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterYear === currentYear && filterMonth === null ? QUICK_ON : QUICK_OFF}`}
+            >
+              This Year
+            </button>
+            <button
+              onClick={() => {
+                if (isThisMonth) clearFilters()
+                else { setFilterYear(currentYear); setFilterMonth(currentMonth) }
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${isThisMonth ? QUICK_ON : QUICK_OFF}`}
+            >
+              This Month
+            </button>
+          </div>
+
+          {/* Clear */}
+          {hasFilters && (
+            <button
+              onClick={clearFilters}
+              className="flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              Clear
+            </button>
+          )}
+
+          {/* Type pills */}
+          <div className="flex items-center gap-1 ml-auto">
             {([null, 'expense', 'income', 'savings'] as (TransactionType | null)[]).map((t) => {
               const key = t ?? 'all'
               return (
@@ -374,25 +558,74 @@ export default function Tracker() {
         </div>
 
         {/* View tabs */}
-        <div className="mt-5 flex items-center gap-1 border-b border-gray-200 dark:border-gray-800">
-          {(['transactions', 'summary'] as ViewMode[]).map((v) => (
+        <div className="mt-5 flex items-center justify-between border-b border-gray-200 dark:border-gray-800">
+          <div className="flex items-center gap-1">
+            {(['transactions', 'summary'] as ViewMode[]).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`px-1 pb-3 mr-3 text-sm font-medium capitalize border-b-2 -mb-px transition-colors ${
+                  view === v
+                    ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                }`}
+              >
+                {v.charAt(0).toUpperCase() + v.slice(1)}
+              </button>
+            ))}
+          </div>
+          {view === 'transactions' && (
             <button
-              key={v}
-              onClick={() => setView(v)}
-              className={`px-1 pb-3 mr-3 text-sm font-medium capitalize border-b-2 -mb-px transition-colors ${
-                view === v
-                  ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+              onClick={() => { setSelectMode((m) => !m); setSelectedIds(new Set()); setConfirmBulkDelete(false) }}
+              className={`mb-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                selectMode
+                  ? 'bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-950/40 dark:border-indigo-800 dark:text-indigo-400'
+                  : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-300'
               }`}
             >
-              {v.charAt(0).toUpperCase() + v.slice(1)}
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                {selectMode ? (
+                  <>
+                    <rect x="1" y="1" width="14" height="14" rx="3" />
+                    <polyline points="4 8 7 11 12 5" />
+                  </>
+                ) : (
+                  <rect x="1" y="1" width="14" height="14" rx="3" />
+                )}
+              </svg>
+              {selectMode ? 'Exit Select' : 'Select'}
             </button>
-          ))}
+          )}
         </div>
 
         {/* ── Transactions view ──────────────────────────────────────────── */}
         {view === 'transactions' && (
-          <div className="mt-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
+          <>
+            {selectedIds.size > 0 && (
+              <div className="mt-4 flex items-center justify-between gap-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-4 py-2.5 flex-wrap">
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  <span className="font-medium">{selectedIds.size}</span>{' '}
+                  {selectedIds.size === 1 ? 'transaction' : 'transactions'} selected
+                </span>
+                <div className="flex items-center gap-2">
+                  {confirmBulkDelete ? (
+                    <>
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                        Permanently delete {selectedIds.size} {selectedIds.size === 1 ? 'transaction' : 'transactions'}?
+                      </span>
+                      <button onClick={handleBulkDelete} className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors">Confirm</button>
+                      <button onClick={() => setConfirmBulkDelete(false)} className="px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors">Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => setConfirmBulkDelete(true)} className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors">Delete selected</button>
+                      <button onClick={() => { setSelectedIds(new Set()); setSelectMode(false) }} className="px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors">Exit Select</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+            <div className="mt-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
             {loading ? (
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -425,7 +658,17 @@ export default function Tracker() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-200 dark:border-gray-800">
-                      <th className="text-left py-3 px-5 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Date</th>
+                      {selectMode && (
+                        <th className="py-3 pl-5 pr-2 w-px">
+                          <input
+                            type="checkbox"
+                            checked={displayTransactions.length > 0 && selectedIds.size === displayTransactions.length}
+                            onChange={toggleSelectAll}
+                            className="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0"
+                          />
+                        </th>
+                      )}
+                      <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Date</th>
                       <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400">Type</th>
                       <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400">Category</th>
                       <th className="text-right py-3 px-4 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Amount</th>
@@ -434,25 +677,79 @@ export default function Tracker() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                    {transactions.map((tx) =>
-                      deletingId === tx.id ? (
+                    {displayTransactions.map((tx) => {
+                      const txGroupId       = tx.recurrence_group_id ?? tx.split_group_id
+                      const meta            = txGroupId ? groupMeta?.get(txGroupId) : undefined
+                      const isCollapsed     = Boolean(meta)
+                      const displayAmount   = meta?.isSplit ? meta.totalAmount : tx.amount
+                      const btnDel = 'text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300'
+                      return deletingId === tx.id ? (
                         <tr key={tx.id} className="bg-red-50 dark:bg-red-950/20">
-                          <td colSpan={6} className="py-3 px-5">
-                            <div className="flex items-center gap-4">
+                          <td colSpan={selectMode ? 7 : 6} className="py-3 px-5">
+                            <div className="flex items-center gap-4 flex-wrap">
                               <span className="text-sm text-gray-600 dark:text-gray-400">
-                                Delete <span className="font-medium text-gray-900 dark:text-white">{tx.category}</span> — {formatCurrency(tx.amount)}?
+                                {isCollapsed && meta?.isSplit
+                                  ? <>Delete all <span className="font-medium text-gray-900 dark:text-white">{meta.count}</span> installments of <span className="font-medium text-gray-900 dark:text-white">{tx.category}</span> ({formatCurrency(meta.totalAmount)} total)?</>
+                                  : isCollapsed
+                                  ? <>Delete all <span className="font-medium text-gray-900 dark:text-white">{meta?.count}</span> occurrences of <span className="font-medium text-gray-900 dark:text-white">{tx.category}</span>?</>
+                                  : tx.recurrence
+                                  ? <>Delete <span className="font-medium text-gray-900 dark:text-white capitalize">{tx.recurrence}</span> recurring — {formatCurrency(tx.amount)}?</>
+                                  : tx.split_group_id
+                                  ? <>Delete this installment of <span className="font-medium text-gray-900 dark:text-white">{tx.category}</span> — {formatCurrency(tx.amount)}?</>
+                                  : <>Delete <span className="font-medium text-gray-900 dark:text-white">{tx.category}</span> — {formatCurrency(tx.amount)}?</>
+                                }
                               </span>
-                              <button onClick={() => handleDelete(tx.id)} className="text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300">Delete</button>
+                              {isCollapsed ? (
+                                <button onClick={() => handleDelete(tx, 'all')} className={btnDel}>Delete all</button>
+                              ) : (tx.recurrence || tx.split_group_id) ? (
+                                <>
+                                  <button onClick={() => handleDelete(tx, 'single')} className={btnDel}>This only</button>
+                                  <button onClick={() => handleDelete(tx, 'future')} className={btnDel}>This &amp; future</button>
+                                </>
+                              ) : (
+                                <button onClick={() => handleDelete(tx)} className={btnDel}>Delete</button>
+                              )}
                               <button onClick={() => setDeletingId(null)} className="text-xs font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Cancel</button>
                             </div>
                           </td>
                         </tr>
                       ) : (
-                        <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors group">
-                          <td className="py-3 px-5 text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDate(tx.date)}</td>
+                        <tr key={tx.id} className={`transition-colors group ${selectedIds.has(tx.id) ? 'bg-indigo-50 dark:bg-indigo-950/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'}`}>
+                          {selectMode && (
+                            <td className="py-3 pl-5 pr-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(tx.id)}
+                                onChange={() => toggleSelect(tx.id)}
+                                className="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0"
+                              />
+                            </td>
+                          )}
+                          <td className="py-3 px-4 text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDate(tx.date)}</td>
                           <td className="py-3 px-4"><TypeBadge type={tx.type} /></td>
-                          <td className="py-3 px-4 text-gray-900 dark:text-white">{tx.category}</td>
-                          <td className={`py-3 px-4 text-right font-medium tabular-nums whitespace-nowrap ${AMOUNT_COLOR[tx.type]}`}>{formatCurrency(tx.amount)}</td>
+                          <td className="py-3 px-4 text-gray-900 dark:text-white">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {tx.category}
+                              {tx.recurrence && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-500 dark:bg-indigo-950/60 dark:text-indigo-400 capitalize whitespace-nowrap">
+                                  ↻ {tx.recurrence}
+                                </span>
+                              )}
+                              {tx.split_group_id && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-500 dark:bg-violet-950/60 dark:text-violet-400 whitespace-nowrap">
+                                  ÷ {meta ? `${meta.count}mo` : 'spread'}
+                                </span>
+                              )}
+                              {isCollapsed && !meta?.isSplit && meta && meta.count > 1 && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 whitespace-nowrap">
+                                  ×{meta.count}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className={`py-3 px-4 text-right font-medium tabular-nums whitespace-nowrap ${AMOUNT_COLOR[tx.type]}`}>
+                            {formatCurrency(displayAmount)}
+                          </td>
                           <td className="py-3 px-4 text-gray-500 dark:text-gray-400 hidden sm:table-cell">
                             {tx.note ? <span className="block max-w-xs truncate">{tx.note}</span> : <span className="text-gray-300 dark:text-gray-600">—</span>}
                           </td>
@@ -464,12 +761,13 @@ export default function Tracker() {
                           </td>
                         </tr>
                       )
-                    )}
+                    })}
                   </tbody>
                 </table>
               </div>
             )}
           </div>
+          </>
         )}
 
         {/* ── Summary view ──────────────────────────────────────────────── */}
