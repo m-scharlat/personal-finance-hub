@@ -4,7 +4,7 @@ const links = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/tracker', label: 'Tracker' },
   { to: '/import', label: 'Import' },
-  { to: '/settings/categories', label: 'Settings' },
+  { to: '/settings', label: 'Settings' },
 ]
 
 export default function Nav() {

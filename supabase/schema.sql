@@ -90,3 +90,20 @@ CREATE INDEX IF NOT EXISTS transactions_recurrence_group_idx
 CREATE INDEX IF NOT EXISTS transactions_split_group_idx
   ON transactions (split_group_id)
   WHERE split_group_id IS NOT NULL;
+
+-- ============================================================
+-- Migration: import mappings
+-- Run in the Supabase SQL editor after the initial schema.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS import_mappings (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  triggers    TEXT[]      NOT NULL,
+  category    TEXT        NOT NULL,
+  type        TEXT        NOT NULL CHECK (type IN ('expense', 'income', 'savings')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE import_mappings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "anon_all_import_mappings" ON import_mappings
+  FOR ALL USING (true) WITH CHECK (true);

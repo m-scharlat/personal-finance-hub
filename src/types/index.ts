@@ -23,3 +23,11 @@ export interface Category {
   sort_order: number
   created_at: string
 }
+
+export interface ImportMapping {
+  id: string
+  triggers: string[]
+  category: string
+  type: TransactionType
+  created_at: string
+}

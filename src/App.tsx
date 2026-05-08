@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import Tracker from './pages/Tracker'
 import Import from './pages/Import'
 import Categories from './pages/settings/Categories'
+import ImportMappings from './pages/settings/ImportMappings'
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
           <Route path="/import" element={<Import />} />
           <Route path="/settings" element={<Navigate to="/settings/categories" replace />} />
           <Route path="/settings/categories" element={<Categories />} />
+          <Route path="/settings/import-mappings" element={<ImportMappings />} />
         </Routes>
       </main>
     </div>

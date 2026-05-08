@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { formatCurrency } from '../lib/format'
-import type { Category, TransactionType } from '../types'
+import type { Category, ImportMapping, TransactionType } from '../types'
 
 // ── Parser ────────────────────────────────────────────────────────────────
 
@@ -14,7 +14,14 @@ interface ParsedRow {
   type: TransactionType
   category: string
   confident: boolean
+  wasUncertain: boolean
   note: string
+}
+
+interface PendingSave {
+  note: string
+  type: TransactionType
+  category: string
 }
 
 function suggestCategory(note: string, type: TransactionType, cats: Category[]): { category: string; confident: boolean } {
@@ -48,23 +55,43 @@ function suggestCategory(note: string, type: TransactionType, cats: Category[]):
   return { category: name, confident }
 }
 
-function parseText(text: string, cats: Category[]): ParsedRow[] {
+function parseText(text: string, cats: Category[], mappings: ImportMapping[]): ParsedRow[] {
   return text
     .split('\n')
     .map((line) => line.match(LINE_RE))
     .filter(Boolean)
     .map((m) => {
       const [, sign, amountStr, desc] = m!
-      const type: TransactionType = sign === '+' ? 'income' : 'expense'
+      const signType: TransactionType = sign === '+' ? 'income' : 'expense'
       const note = desc.trim()
-      const { category, confident } = suggestCategory(note, type, cats)
+      const lowerNote = note.toLowerCase()
+
+      // Check saved mappings first (exact match, case-insensitive)
+      const mappingMatch = mappings.find((mp) =>
+        mp.triggers.some((t) => t.toLowerCase() === lowerNote),
+      )
+      if (mappingMatch) {
+        return {
+          id: crypto.randomUUID(),
+          include: true,
+          amount: parseInt(amountStr, 10),
+          type: mappingMatch.type,
+          category: mappingMatch.category,
+          confident: true,
+          wasUncertain: false,
+          note,
+        }
+      }
+
+      const { category, confident } = suggestCategory(note, signType, cats)
       return {
         id: crypto.randomUUID(),
         include: true,
         amount: parseInt(amountStr, 10),
-        type,
+        type: signType,
         category,
         confident,
+        wasUncertain: !confident,
         note,
       }
     })
@@ -88,6 +115,12 @@ const AMOUNT_COLOR: Record<TransactionType, string> = {
   savings: 'text-indigo-600 dark:text-indigo-400',
 }
 
+const TYPE_COLORS: Record<TransactionType, string> = {
+  expense: 'bg-red-50 text-red-600 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800',
+  income:  'bg-green-50 text-green-600 border-green-200 dark:bg-green-950/40 dark:text-green-400 dark:border-green-800',
+  savings: 'bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800',
+}
+
 export default function Import() {
   const [step, setStep]             = useState<Step>('input')
   const [rawText, setRawText]       = useState('')
@@ -95,13 +128,20 @@ export default function Import() {
   const [year, setYear]             = useState(now.getFullYear())
   const [rows, setRows]             = useState<ParsedRow[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [mappings, setMappings]     = useState<ImportMapping[]>([])
   const [importing, setImporting]   = useState(false)
   const [error, setError]           = useState<string | null>(null)
-  const [successCount, setSuccessCount] = useState<number | null>(null)
+  const [successCount, setSuccessCount]       = useState<number | null>(null)
+  const [pendingSave, setPendingSave]         = useState<PendingSave[]>([])
+  const [savingMappings, setSavingMappings]   = useState(false)
 
   useEffect(() => {
-    supabase.from('categories').select('*').order('type').order('name').then(({ data }) => {
-      if (data) setCategories(data)
+    Promise.all([
+      supabase.from('categories').select('*').order('type').order('name'),
+      supabase.from('import_mappings').select('*').order('created_at'),
+    ]).then(([{ data: cats }, { data: maps }]) => {
+      if (cats) setCategories(cats)
+      if (maps) setMappings(maps)
     })
   }, [])
 
@@ -110,13 +150,14 @@ export default function Import() {
   }
 
   function handleParse() {
-    const parsed = parseText(rawText, categories)
+    const parsed = parseText(rawText, categories, mappings)
     if (parsed.length === 0) {
       setError('No transactions found. Check that your lines follow the format: - [x] - 25 food')
       return
     }
     setError(null)
     setSuccessCount(null)
+    setPendingSave([])
     setRows(parsed)
     setStep('review')
   }
@@ -143,10 +184,34 @@ export default function Import() {
     const { error: err } = await supabase.from('transactions').insert(records)
     setImporting(false)
     if (err) { setError(err.message); return }
+
+    // Collect rows that were originally uncertain but the user confirmed
+    const candidates = selectedRows.filter((r) => r.wasUncertain && r.confident)
+    if (candidates.length > 0) {
+      setPendingSave(candidates.map((r) => ({ note: r.note, type: r.type, category: r.category })))
+    }
+
     setSuccessCount(selectedRows.length)
     setStep('input')
     setRawText('')
     setRows([])
+  }
+
+  async function handleSaveMappings() {
+    setSavingMappings(true)
+    const records = pendingSave.map((ps) => ({
+      triggers: [ps.note],
+      category: ps.category,
+      type: ps.type,
+    }))
+    const { error: err } = await supabase.from('import_mappings').insert(records)
+    setSavingMappings(false)
+    if (err) { setError(err.message); return }
+    setPendingSave([])
+    // Reload mappings so they apply on next parse in this session
+    supabase.from('import_mappings').select('*').order('created_at').then(({ data }) => {
+      if (data) setMappings(data)
+    })
   }
 
   // ── Stats for review header ───────────────────────────────────────────
@@ -186,6 +251,56 @@ export default function Import() {
       {error && (
         <div className="mt-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-4 py-3 text-sm text-red-700 dark:text-red-400">
           {error}
+        </div>
+      )}
+
+      {/* Post-import: save mappings prompt */}
+      {pendingSave.length > 0 && step === 'input' && (
+        <div className="mt-4 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/10 overflow-hidden">
+          <div className="px-5 py-4 border-b border-amber-100 dark:border-amber-900/40 flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300">Save as auto-mappings?</h3>
+              <p className="mt-0.5 text-xs text-amber-600 dark:text-amber-500">
+                These notes were manually categorized. Save them so future imports are categorized automatically.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setPendingSave([])}
+                className="text-xs font-medium text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200 transition-colors"
+              >
+                Skip
+              </button>
+              <button
+                onClick={handleSaveMappings}
+                disabled={savingMappings || pendingSave.length === 0}
+                className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {savingMappings ? 'Saving…' : `Save ${pendingSave.length} mapping${pendingSave.length !== 1 ? 's' : ''}`}
+              </button>
+            </div>
+          </div>
+          <ul className="divide-y divide-amber-100 dark:divide-amber-900/30">
+            {pendingSave.map((ps, i) => (
+              <li key={i} className="flex items-center gap-3 px-5 py-2.5">
+                <div className="flex-1 flex flex-wrap items-center gap-2 min-w-0">
+                  <span className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate">{ps.note}</span>
+                  <span className="text-xs text-gray-400 dark:text-gray-500">→</span>
+                  <span className="text-xs font-medium text-gray-900 dark:text-white">{ps.category}</span>
+                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${TYPE_COLORS[ps.type]}`}>
+                    {ps.type}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setPendingSave((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400 text-sm leading-none transition-colors"
+                  title="Remove from list"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

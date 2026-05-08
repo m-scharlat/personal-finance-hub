@@ -17,6 +17,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '../../lib/supabase'
+import SettingsNav from '../../components/SettingsNav'
 import type { Category, TransactionType } from '../../types'
 
 const TYPE_LABELS: Record<TransactionType, string> = {
@@ -336,10 +337,8 @@ export default function Categories() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
-      <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Categories</h1>
-      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        Manage the categories available when logging transactions.
-      </p>
+      <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Settings</h1>
+      <SettingsNav />
 
       {fetchError && (
         <div className="mt-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 px-4 py-3 text-sm text-red-700 dark:text-red-400">
