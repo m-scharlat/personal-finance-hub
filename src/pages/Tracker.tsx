@@ -277,9 +277,12 @@ export default function Tracker() {
   const [filterMonth, setFilterMonth] = useState<number | null>(null)
   const [filterType, setFilterType]   = useState<TransactionType | null>(null)
 
-  const [modalOpen, setModalOpen]   = useState(false)
-  const [editingTx, setEditingTx]   = useState<Transaction | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [modalOpen, setModalOpen]           = useState(false)
+  const [editingTx, setEditingTx]           = useState<Transaction | null>(null)
+  const [deletingId, setDeletingId]         = useState<string | null>(null)
+  const [selectedIds, setSelectedIds]       = useState<Set<string>>(new Set())
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [selectMode, setSelectMode]         = useState(false)
 
   const hasFilters   = filterYear !== null || filterMonth !== null || filterType !== null
   const isThisMonth = filterYear === currentYear && filterMonth === currentMonth
@@ -307,6 +310,8 @@ export default function Tracker() {
     load()
     return () => { cancelled = true }
   }, [filterYear, filterMonth, filterType, refresh])
+
+  useEffect(() => { setSelectedIds(new Set()); setConfirmBulkDelete(false); setSelectMode(false) }, [filterYear, filterMonth, filterType])
 
   // Per-type aggregation (income + expense only for cards; savings lives in Net Savings)
   const aggregation = useMemo<AggGroup[]>(() => {
@@ -370,6 +375,32 @@ export default function Tracker() {
   }, [transactions, groupMeta])
 
   function clearFilters() { setFilterYear(null); setFilterMonth(null); setFilterType(null) }
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds(
+      selectedIds.size === displayTransactions.length
+        ? new Set()
+        : new Set(displayTransactions.map((tx) => tx.id)),
+    )
+  }
+
+  async function handleBulkDelete() {
+    if (selectedIds.size === 0) return
+    const { error } = await supabase.from('transactions').delete().in('id', Array.from(selectedIds))
+    if (error) { setError(error.message); return }
+    setSelectedIds(new Set())
+    setConfirmBulkDelete(false)
+    setRefresh((r) => r + 1)
+  }
 
   function stepMonth(dir: 1 | -1) {
     const baseYear  = filterYear  ?? currentYear
@@ -527,25 +558,74 @@ export default function Tracker() {
         </div>
 
         {/* View tabs */}
-        <div className="mt-5 flex items-center gap-1 border-b border-gray-200 dark:border-gray-800">
-          {(['transactions', 'summary'] as ViewMode[]).map((v) => (
+        <div className="mt-5 flex items-center justify-between border-b border-gray-200 dark:border-gray-800">
+          <div className="flex items-center gap-1">
+            {(['transactions', 'summary'] as ViewMode[]).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`px-1 pb-3 mr-3 text-sm font-medium capitalize border-b-2 -mb-px transition-colors ${
+                  view === v
+                    ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                }`}
+              >
+                {v.charAt(0).toUpperCase() + v.slice(1)}
+              </button>
+            ))}
+          </div>
+          {view === 'transactions' && (
             <button
-              key={v}
-              onClick={() => setView(v)}
-              className={`px-1 pb-3 mr-3 text-sm font-medium capitalize border-b-2 -mb-px transition-colors ${
-                view === v
-                  ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+              onClick={() => { setSelectMode((m) => !m); setSelectedIds(new Set()); setConfirmBulkDelete(false) }}
+              className={`mb-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                selectMode
+                  ? 'bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-950/40 dark:border-indigo-800 dark:text-indigo-400'
+                  : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-300'
               }`}
             >
-              {v.charAt(0).toUpperCase() + v.slice(1)}
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                {selectMode ? (
+                  <>
+                    <rect x="1" y="1" width="14" height="14" rx="3" />
+                    <polyline points="4 8 7 11 12 5" />
+                  </>
+                ) : (
+                  <rect x="1" y="1" width="14" height="14" rx="3" />
+                )}
+              </svg>
+              {selectMode ? 'Exit Select' : 'Select'}
             </button>
-          ))}
+          )}
         </div>
 
         {/* ── Transactions view ──────────────────────────────────────────── */}
         {view === 'transactions' && (
-          <div className="mt-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
+          <>
+            {selectedIds.size > 0 && (
+              <div className="mt-4 flex items-center justify-between gap-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-4 py-2.5 flex-wrap">
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  <span className="font-medium">{selectedIds.size}</span>{' '}
+                  {selectedIds.size === 1 ? 'transaction' : 'transactions'} selected
+                </span>
+                <div className="flex items-center gap-2">
+                  {confirmBulkDelete ? (
+                    <>
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                        Permanently delete {selectedIds.size} {selectedIds.size === 1 ? 'transaction' : 'transactions'}?
+                      </span>
+                      <button onClick={handleBulkDelete} className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors">Confirm</button>
+                      <button onClick={() => setConfirmBulkDelete(false)} className="px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors">Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => setConfirmBulkDelete(true)} className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors">Delete selected</button>
+                      <button onClick={() => { setSelectedIds(new Set()); setSelectMode(false) }} className="px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors">Exit Select</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+            <div className="mt-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
             {loading ? (
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -578,7 +658,17 @@ export default function Tracker() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-200 dark:border-gray-800">
-                      <th className="text-left py-3 px-5 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Date</th>
+                      {selectMode && (
+                        <th className="py-3 pl-5 pr-2 w-px">
+                          <input
+                            type="checkbox"
+                            checked={displayTransactions.length > 0 && selectedIds.size === displayTransactions.length}
+                            onChange={toggleSelectAll}
+                            className="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0"
+                          />
+                        </th>
+                      )}
+                      <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Date</th>
                       <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400">Type</th>
                       <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400">Category</th>
                       <th className="text-right py-3 px-4 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Amount</th>
@@ -595,7 +685,7 @@ export default function Tracker() {
                       const btnDel = 'text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300'
                       return deletingId === tx.id ? (
                         <tr key={tx.id} className="bg-red-50 dark:bg-red-950/20">
-                          <td colSpan={6} className="py-3 px-5">
+                          <td colSpan={selectMode ? 7 : 6} className="py-3 px-5">
                             <div className="flex items-center gap-4 flex-wrap">
                               <span className="text-sm text-gray-600 dark:text-gray-400">
                                 {isCollapsed && meta?.isSplit
@@ -624,8 +714,18 @@ export default function Tracker() {
                           </td>
                         </tr>
                       ) : (
-                        <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors group">
-                          <td className="py-3 px-5 text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDate(tx.date)}</td>
+                        <tr key={tx.id} className={`transition-colors group ${selectedIds.has(tx.id) ? 'bg-indigo-50 dark:bg-indigo-950/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'}`}>
+                          {selectMode && (
+                            <td className="py-3 pl-5 pr-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(tx.id)}
+                                onChange={() => toggleSelect(tx.id)}
+                                className="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0"
+                              />
+                            </td>
+                          )}
+                          <td className="py-3 px-4 text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDate(tx.date)}</td>
                           <td className="py-3 px-4"><TypeBadge type={tx.type} /></td>
                           <td className="py-3 px-4 text-gray-900 dark:text-white">
                             <div className="flex items-center gap-2 flex-wrap">
@@ -667,6 +767,7 @@ export default function Tracker() {
               </div>
             )}
           </div>
+          </>
         )}
 
         {/* ── Summary view ──────────────────────────────────────────────── */}
