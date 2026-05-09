@@ -19,7 +19,7 @@ export default function InfoTooltip({ text, align = 'left' }: Props) {
         ${align === 'left' ? 'right-0' : 'left-0'}
         rounded-lg border border-gray-200 dark:border-gray-700
         bg-white dark:bg-gray-900 shadow-lg
-        px-3 py-2 text-xs text-gray-500 dark:text-gray-400 leading-relaxed
+        px-3 py-2 text-xs text-gray-500 dark:text-gray-400 leading-relaxed whitespace-pre-wrap
         opacity-0 group-hover/tip:opacity-100 transition-opacity duration-150
       `}>
         {text}
