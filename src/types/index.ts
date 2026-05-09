@@ -31,3 +31,13 @@ export interface ImportMapping {
   type: TransactionType
   created_at: string
 }
+
+export interface MonthlyTrendPoint {
+  label: string
+  year: number
+  month: number
+  income: number
+  expenses: number
+  savings: number
+  savingsRate: number
+}

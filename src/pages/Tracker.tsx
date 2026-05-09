@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatCurrency, formatDate } from '../lib/format'
 import TransactionModal from '../components/TransactionModal'
@@ -288,8 +289,15 @@ export default function Tracker() {
   const [refresh, setRefresh]           = useState(0)
 
   const [view, setView]               = useState<ViewMode>('transactions')
-  const [filterYear, setFilterYear]   = useState<number | null>(null)
-  const [filterMonth, setFilterMonth] = useState<number | null>(null)
+  const [searchParams] = useSearchParams()
+  const [filterYear, setFilterYear]   = useState<number | null>(() => {
+    const y = searchParams.get('year')
+    return y ? Number(y) : null
+  })
+  const [filterMonth, setFilterMonth] = useState<number | null>(() => {
+    const m = searchParams.get('month')
+    return m ? Number(m) : null
+  })
   const [filterType, setFilterType]   = useState<TransactionType | null>(null)
 
   const [sort, setSort] = useState<SortState>({ col: 'date', dir: 'desc' })
