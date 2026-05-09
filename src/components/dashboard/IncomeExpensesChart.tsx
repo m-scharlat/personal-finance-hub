@@ -58,10 +58,10 @@ function CustomTooltip({ active, payload, label }: {
   )
 }
 
-function XTick(props: { x?: number; y?: number; payload?: { value: string }; isCurrent?: boolean }) {
+function XTick(props: { x?: number | string; y?: number | string; payload?: { value: string }; isCurrent?: boolean }) {
   const { x = 0, y = 0, payload, isCurrent } = props
   return (
-    <text x={x} y={y} dy={14} textAnchor="middle" fontSize={11}
+    <text x={Number(x)} y={Number(y)} dy={14} textAnchor="middle" fontSize={11}
       fontWeight={isCurrent ? 700 : 400}
       fill={isCurrent ? '#c4b09a' : AXIS_COLOR}
     >
@@ -111,12 +111,12 @@ export default function IncomeExpensesChart({ data }: Props) {
           <ReferenceArea x1={currentLabel} x2={currentLabel} fill="rgba(196,176,154,0.10)" strokeOpacity={0} />
         )}
         <Bar dataKey="income" name="Income" radius={[3, 3, 0, 0]}>
-          {chartData.map((d, i) => (
+          {chartData.map((_, i) => (
             <Cell key={i} fill={INCOME_COLOR} />
           ))}
         </Bar>
         <Bar dataKey="expenses" name="Expenses" radius={[3, 3, 0, 0]}>
-          {chartData.map((d, i) => (
+          {chartData.map((_, i) => (
             <Cell key={i} fill={EXPENSE_COLOR} />
           ))}
         </Bar>
