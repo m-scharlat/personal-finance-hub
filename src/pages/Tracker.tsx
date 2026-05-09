@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatCurrency, formatDate } from '../lib/format'
 import TransactionModal from '../components/TransactionModal'
@@ -188,8 +189,8 @@ function NetSavingsCard({
   // Bars relative to net when surplus; relative to allocated when deficit or zero net
   const barBase = !isDeficit && netAmount > 0 ? netAmount : totalAllocated
 
-  // Unallocated only makes sense when net is positive
-  const unallocated = !isDeficit && savingsGroup ? netAmount - totalAllocated : null
+  // Remaining (net not yet logged as savings) only makes sense when net is positive
+  const remaining = !isDeficit && savingsGroup ? netAmount - totalAllocated : null
 
   return (
     <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
@@ -238,24 +239,24 @@ function NetSavingsCard({
             )
           })}
 
-          {/* Unallocated — only when net is positive */}
-          {unallocated !== null && unallocated > 0 && (
+          {/* Remaining — only when net is positive */}
+          {remaining !== null && remaining > 0 && (
             <div className="px-5 py-3.5">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-500 dark:text-gray-400">Unallocated</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">Remaining</span>
                 <div className="flex items-center gap-3">
                   <span className="text-xs tabular-nums text-gray-400 dark:text-gray-500">
-                    {((unallocated / netAmount) * 100).toFixed(1)}%
+                    {((remaining / netAmount) * 100).toFixed(1)}%
                   </span>
                   <span className="text-sm font-medium tabular-nums text-gray-600 dark:text-gray-300">
-                    {formatCurrency(unallocated)}
+                    {formatCurrency(remaining)}
                   </span>
                 </div>
               </div>
               <div className="h-1 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gray-300 dark:bg-gray-600 rounded-full"
-                  style={{ width: `${(unallocated / netAmount) * 100}%` }}
+                  style={{ width: `${(remaining / netAmount) * 100}%` }}
                 />
               </div>
             </div>
@@ -288,8 +289,15 @@ export default function Tracker() {
   const [refresh, setRefresh]           = useState(0)
 
   const [view, setView]               = useState<ViewMode>('transactions')
-  const [filterYear, setFilterYear]   = useState<number | null>(null)
-  const [filterMonth, setFilterMonth] = useState<number | null>(null)
+  const [searchParams] = useSearchParams()
+  const [filterYear, setFilterYear]   = useState<number | null>(() => {
+    const y = searchParams.get('year')
+    return y ? Number(y) : null
+  })
+  const [filterMonth, setFilterMonth] = useState<number | null>(() => {
+    const m = searchParams.get('month')
+    return m ? Number(m) : null
+  })
   const [filterType, setFilterType]   = useState<TransactionType | null>(null)
 
   const [sort, setSort] = useState<SortState>({ col: 'date', dir: 'desc' })
