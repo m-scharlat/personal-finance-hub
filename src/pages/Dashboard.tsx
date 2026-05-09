@@ -32,7 +32,9 @@ export default function Dashboard() {
   const [transactions, setTransactions]   = useState<Transaction[]>([])
   const [loading, setLoading]             = useState(true)
   const [error, setError]                 = useState<string | null>(null)
-  const [chartView, setChartView]         = useState<ChartView>('calendar')
+  const [chartView, setChartView]           = useState<ChartView>('trend')
+  const [compTransactions, setCompTransactions] = useState<Transaction[]>([])
+  const [compLoading, setCompLoading]       = useState(true)
 
   function handleYearChange(year: number) {
     setSelectedYear(year)
@@ -56,6 +58,23 @@ export default function Dashboard() {
       }
     }
     load()
+    return () => { cancelled = true }
+  }, [selectedYear])
+
+  // Fetch previous year for YoY comparison
+  useEffect(() => {
+    let cancelled = false
+    setCompLoading(true)
+    supabase
+      .from('transactions')
+      .select('*')
+      .eq('year', selectedYear - 1)
+      .then(({ data }) => {
+        if (!cancelled) {
+          setCompTransactions(data ?? [])
+          setCompLoading(false)
+        }
+      })
     return () => { cancelled = true }
   }, [selectedYear])
 
@@ -87,6 +106,54 @@ export default function Dashboard() {
 
     return { income, expenses, savings, netFlow, savingsRate, committed }
   }, [transactions, selectedMonth])
+
+  // ── Comparison metrics (previous year, same period) ──────────────────────
+
+  const compMetrics = useMemo(() => {
+    const filtered = selectedMonth
+      ? compTransactions.filter(t => t.month === selectedMonth)
+      : compTransactions
+    const income   = filtered.filter(t => t.type === 'income') .reduce((s, t) => s + t.amount, 0)
+    const expenses = filtered.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+    const savings  = filtered.filter(t => t.type === 'savings').reduce((s, t) => s + t.amount, 0)
+    const savingsRate = income > 0 ? (savings / income) * 100 : null
+    const netFlow  = income - expenses
+    return { income, expenses, savings, savingsRate, netFlow }
+  }, [compTransactions, selectedMonth])
+
+  const deltas = useMemo(() => {
+    if (compLoading) return null
+    const prevYear  = selectedYear - 1
+    const label = selectedMonth
+      ? `vs ${MONTH_SHORT[selectedMonth - 1]} '${String(prevYear).slice(2)}`
+      : `vs ${prevYear}`
+
+    function pct(curr: number, prev: number) {
+      if (prev === 0) return null
+      return ((curr - prev) / prev) * 100
+    }
+    function fmtPct(val: number | null) {
+      if (val === null) return null
+      return `${val >= 0 ? '↑' : '↓'} ${Math.abs(val).toFixed(1)}%`
+    }
+
+    const incomePct   = pct(metrics.income,   compMetrics.income)
+    const expensesPct = pct(metrics.expenses, compMetrics.expenses)
+    const netDiff     = metrics.netFlow - compMetrics.netFlow
+    const rateDiff    = metrics.savingsRate !== null && compMetrics.savingsRate !== null
+      ? metrics.savingsRate - compMetrics.savingsRate
+      : null
+
+    return {
+      label,
+      income:      { delta: fmtPct(incomePct),   good: incomePct   === null ? undefined : incomePct   >= 0 },
+      expenses:    { delta: fmtPct(expensesPct),  good: expensesPct === null ? undefined : expensesPct <= 0 },
+      netFlow:     { delta: netDiff !== 0 ? `${netDiff >= 0 ? '↑' : '↓'} ${formatCurrency(Math.abs(netDiff))}` : null,
+                     good: netDiff >= 0 },
+      savingsRate: { delta: rateDiff !== null ? `${rateDiff >= 0 ? '↑' : '↓'} ${Math.abs(rateDiff).toFixed(1)}pp` : null,
+                     good: rateDiff !== null ? rateDiff >= 0 : undefined },
+    }
+  }, [metrics, compMetrics, compLoading, selectedYear, selectedMonth])
 
   // ── Year data (Jan–Dec of selected year) — shared by both chart views ─────
 
@@ -143,8 +210,8 @@ export default function Dashboard() {
   const netFlowValue = `${metrics.netFlow >= 0 ? '+' : '−'}${formatCurrency(Math.abs(metrics.netFlow))}`
 
   const CHART_VIEWS: { value: ChartView; label: string }[] = [
-    { value: 'calendar', label: 'Calendar View' },
     { value: 'trend',    label: 'Trends View'   },
+    { value: 'calendar', label: 'Calendar View' },
   ]
 
   return (
@@ -176,18 +243,38 @@ export default function Dashboard() {
           Array.from({ length: 5 }).map((_, i) => <MetricSkeleton key={i} />)
         ) : (
           <>
-            <MetricCard label="Income"        value={formatCurrency(metrics.income)}   color="green" />
-            <MetricCard label="Expenses"      value={formatCurrency(metrics.expenses)} color="red" />
+            <MetricCard
+              label="Income"
+              value={formatCurrency(metrics.income)}
+              color="green"
+              delta={deltas?.income.delta ?? undefined}
+              deltaGood={deltas?.income.good}
+              deltaLabel={deltas?.label}
+            />
+            <MetricCard
+              label="Expenses"
+              value={formatCurrency(metrics.expenses)}
+              color="red"
+              delta={deltas?.expenses.delta ?? undefined}
+              deltaGood={deltas?.expenses.good}
+              deltaLabel={deltas?.label}
+            />
             <MetricCard
               label="Net Cash Flow"
               value={netFlowValue}
               color={metrics.netFlow >= 0 ? 'green' : 'red'}
+              delta={deltas?.netFlow.delta ?? undefined}
+              deltaGood={deltas?.netFlow.good}
+              deltaLabel={deltas?.label}
             />
             <MetricCard
               label="Savings Rate"
               value={metrics.savingsRate !== null ? `${metrics.savingsRate.toFixed(1)}%` : '—'}
               subLabel={metrics.savingsRate === null ? 'No income recorded' : undefined}
               color="indigo"
+              delta={deltas?.savingsRate.delta ?? undefined}
+              deltaGood={deltas?.savingsRate.good}
+              deltaLabel={deltas?.label}
             />
             <MetricCard
               label="Committed / mo"
@@ -203,7 +290,7 @@ export default function Dashboard() {
       <div className="mt-8">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-baseline gap-2">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Trends</h2>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">{chartView === 'trend' ? 'Trends' : 'Calendar'}</h2>
             <span className="text-xs text-gray-400 dark:text-gray-500">{selectedYear}</span>
           </div>
 

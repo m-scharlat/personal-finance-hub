@@ -46,21 +46,29 @@ export default function YearMonthSelector({ year, month, onYearChange, onMonthCh
       </div>
 
       {/* Month selector */}
-      <select
-        value={month ?? ''}
-        onChange={e => onMonthChange(e.target.value === '' ? null : Number(e.target.value))}
-        className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 cursor-pointer"
-      >
-        <option value="">Full Year</option>
-        {MONTH_NAMES.map((name, i) => {
-          const m = i + 1
-          return (
-            <option key={m} value={m} disabled={isCurrentYear && m > currentMonth}>
-              {name}
-            </option>
-          )
-        })}
-      </select>
+      <div className="relative">
+        <select
+          value={month ?? ''}
+          onChange={e => onMonthChange(e.target.value === '' ? null : Number(e.target.value))}
+          className="appearance-none rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 pl-3 pr-8 py-1.5 text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 cursor-pointer"
+        >
+          <option value="">Full Year</option>
+          {MONTH_NAMES.map((name, i) => {
+            const m = i + 1
+            return (
+              <option key={m} value={m} disabled={isCurrentYear && m > currentMonth}>
+                {name}
+              </option>
+            )
+          })}
+        </select>
+        <svg
+          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 dark:text-gray-500"
+          xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+        </svg>
+      </div>
 
       <InfoTooltip
         text="Month selection filters the metrics row only — Trends always show the full selected year"
