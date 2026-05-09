@@ -31,7 +31,7 @@ export default function CalendarView({ data, year }: Props) {
       {/* Color key */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-4">
         {[
-          { color: 'bg-indigo-300 dark:bg-indigo-600', label: 'This month'   },
+          { color: 'bg-[#c4b09a]', label: 'This month'   },
           { color: 'bg-green-300 dark:bg-green-600',   label: 'In the green' },
           { color: 'bg-red-300 dark:bg-red-600',       label: 'In the red'   },
           { color: 'bg-gray-300 dark:bg-gray-600',     label: 'No data'      },
@@ -58,7 +58,7 @@ export default function CalendarView({ data, year }: Props) {
             onClick={hasData && !isFuture ? () => navigate(`/tracker?year=${year}&month=${point.month}`) : undefined}
             className={`rounded-xl border p-3.5 transition-all duration-150 min-h-[130px] flex flex-col ${hasData && !isFuture ? 'cursor-pointer' : 'cursor-default'} ${
               isCurrent
-                ? 'border-indigo-200 dark:border-indigo-800/60 bg-indigo-50/50 dark:bg-indigo-950/20 hover:shadow-md hover:-translate-y-px'
+                ? 'border-[#c4b09a]/40 bg-[#c4b09a]/10 dark:border-[#c4b09a]/25 dark:bg-[#c4b09a]/5 hover:shadow-md hover:-translate-y-px'
                 : isFuture
                 ? 'border-dashed border-gray-300/70 dark:border-gray-600/50 bg-gray-50/30 dark:bg-gray-800/10 opacity-60'
                 : surplus
@@ -71,7 +71,7 @@ export default function CalendarView({ data, year }: Props) {
             {/* Header row */}
             <div className="flex items-center justify-between mb-2.5">
 <p className={`text-[11px] font-bold uppercase tracking-wide ${
-                isCurrent ? 'text-indigo-500 dark:text-indigo-400'
+                isCurrent ? 'text-[#c4b09a]'
                 : isFuture ? 'text-gray-400 dark:text-gray-600'
                 : 'text-gray-400 dark:text-gray-500'
               }`}>
@@ -126,7 +126,7 @@ export default function CalendarView({ data, year }: Props) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
-                      <span className="text-[10px] text-gray-400 dark:text-gray-500">Savings</span>
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500">Logged</span>
                     </div>
                     <span className="text-[11px] font-semibold tabular-nums text-indigo-600 dark:text-indigo-400">
                       {formatCurrency(point.savings)}

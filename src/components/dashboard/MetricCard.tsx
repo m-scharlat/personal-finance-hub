@@ -1,7 +1,10 @@
+import InfoTooltip from '../InfoTooltip'
+
 interface Props {
   label: string
   value: string
   subLabel?: string
+  info?: string         // tooltip text shown on the (i) icon next to the label
   color?: 'green' | 'red' | 'indigo' | 'gray'
   delta?: string        // pre-formatted change, e.g. "↑ 12.3%" or "↓ $240"
   deltaGood?: boolean   // true = green, false = red
@@ -15,10 +18,13 @@ const VALUE_COLOR = {
   gray:   'text-gray-900 dark:text-white',
 }
 
-export default function MetricCard({ label, value, subLabel, color = 'gray', delta, deltaGood, deltaLabel }: Props) {
+export default function MetricCard({ label, value, subLabel, info, color = 'gray', delta, deltaGood, deltaLabel }: Props) {
   return (
     <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-4">
-      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">{label}</p>
+      <div className="flex items-center gap-1.5">
+        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">{label}</p>
+        {info && <InfoTooltip text={info} />}
+      </div>
       <p className={`mt-2 text-2xl font-semibold tabular-nums ${VALUE_COLOR[color]}`}>{value}</p>
       {subLabel && <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{subLabel}</p>}
       {delta && (

@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase'
 import { formatCurrency } from '../lib/format'
 import MetricCard from '../components/dashboard/MetricCard'
 import YearMonthSelector from '../components/dashboard/YearMonthSelector'
-import MonthlyTrendsChart from '../components/dashboard/MonthlyTrendsChart'
+import IncomeExpensesChart from '../components/dashboard/IncomeExpensesChart'
+import CumulativeSavingsChart from '../components/dashboard/CumulativeSavingsChart'
 import CalendarView from '../components/dashboard/CalendarView'
 import RecurringVsOneOffBar from '../components/dashboard/RecurringVsOneOffBar'
 import CategoryBreakdown from '../components/dashboard/CategoryBreakdown'
@@ -12,10 +13,25 @@ import type { Transaction, MonthlyTrendPoint } from '../types'
 
 const now          = new Date()
 const currentYear  = now.getFullYear()
+const currentMonth = now.getMonth() + 1
 
 const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
 type ChartView = 'calendar' | 'trend'
+
+// 20 hand-picked, visually distinct colors. For > 20 categories, HSL fills the gap.
+const CATEGORY_PALETTE = [
+  '#6366f1','#ec4899','#f97316','#10b981','#06b6d4',
+  '#f43f5e','#8b5cf6','#eab308','#3b82f6','#84cc16',
+  '#14b8a6','#f59e0b','#ef4444','#a855f7','#22c55e',
+  '#0ea5e9','#d946ef','#64748b','#e879f9','#fb923c',
+]
+function categoryColor(index: number): string {
+  if (index < CATEGORY_PALETTE.length) return CATEGORY_PALETTE[index]
+  // Evenly distribute hues for any overflow categories
+  const hue = Math.round((index * 137.508) % 360) // golden-angle spacing
+  return `hsl(${hue}, 60%, 55%)`
+}
 
 function MetricSkeleton() {
   return (
@@ -81,9 +97,12 @@ export default function Dashboard() {
   // ── Metrics (Phase 1) ─────────────────────────────────────────────────────
 
   const metrics = useMemo(() => {
+    const isCurrentYear = selectedYear === currentYear
     const filtered = selectedMonth
       ? transactions.filter(t => t.month === selectedMonth)
-      : transactions
+      : isCurrentYear
+        ? transactions.filter(t => t.month <= currentMonth)
+        : transactions
 
     const income   = filtered.filter(t => t.type === 'income') .reduce((s, t) => s + t.amount, 0)
     const expenses = filtered.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
@@ -91,42 +110,59 @@ export default function Dashboard() {
     const netFlow  = income - expenses
     const savingsRate = income > 0 ? (savings / income) * 100 : null
 
-    // committed/mo is a rate — always based on the full year regardless of month filter
+    // committed/mo — always full-year, deduped, normalized to monthly rate
     const seen = new Set<string>()
     let committed = 0
+    const byCat: Record<string, number> = {}
     for (const t of transactions) {
       if (t.type !== 'expense' || !t.recurrence) continue
       const key = t.recurrence_group_id ?? t.id
       if (seen.has(key)) continue
       seen.add(key)
-      if (t.recurrence === 'weekly')  committed += t.amount * 52 / 12
-      if (t.recurrence === 'monthly') committed += t.amount
-      if (t.recurrence === 'annual')  committed += t.amount / 12
+      let rate = 0
+      if (t.recurrence === 'weekly')  rate = t.amount * 52 / 12
+      if (t.recurrence === 'monthly') rate = t.amount
+      if (t.recurrence === 'annual')  rate = t.amount / 12
+      committed += rate
+      byCat[t.category] = (byCat[t.category] ?? 0) + rate
     }
+    const committedByCategory = Object.entries(byCat)
+      .map(([category, monthlyRate]) => ({ category, monthlyRate }))
+      .sort((a, b) => b.monthlyRate - a.monthlyRate)
 
-    return { income, expenses, savings, netFlow, savingsRate, committed }
-  }, [transactions, selectedMonth])
+    const incomeTx = isCurrentYear
+      ? transactions.filter(t => t.type === 'income' && t.month <= currentMonth)
+      : transactions.filter(t => t.type === 'income')
+    const avgMonthlyIncome = incomeTx.reduce((s, t) => s + t.amount, 0) / (isCurrentYear ? currentMonth : 12)
+
+    return { income, expenses, savings, netFlow, savingsRate, committed, committedByCategory, avgMonthlyIncome }
+  }, [transactions, selectedMonth, selectedYear])
 
   // ── Comparison metrics (previous year, same period) ──────────────────────
 
   const compMetrics = useMemo(() => {
     const filtered = selectedMonth
       ? compTransactions.filter(t => t.month === selectedMonth)
-      : compTransactions
+      : selectedYear === currentYear
+        ? compTransactions.filter(t => t.month <= currentMonth)
+        : compTransactions
     const income   = filtered.filter(t => t.type === 'income') .reduce((s, t) => s + t.amount, 0)
     const expenses = filtered.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
     const savings  = filtered.filter(t => t.type === 'savings').reduce((s, t) => s + t.amount, 0)
     const savingsRate = income > 0 ? (savings / income) * 100 : null
     const netFlow  = income - expenses
     return { income, expenses, savings, savingsRate, netFlow }
-  }, [compTransactions, selectedMonth])
+  }, [compTransactions, selectedMonth, selectedYear])
 
   const deltas = useMemo(() => {
     if (compLoading) return null
+    if (compTransactions.length === 0) return null
     const prevYear  = selectedYear - 1
     const label = selectedMonth
       ? `vs ${MONTH_SHORT[selectedMonth - 1]} '${String(prevYear).slice(2)}`
-      : `vs ${prevYear}`
+      : selectedYear === currentYear
+        ? `vs Jan–${MONTH_SHORT[currentMonth - 1]} '${String(prevYear).slice(2)}`
+        : `vs ${prevYear}`
 
     function pct(curr: number, prev: number) {
       if (prev === 0) return null
@@ -139,7 +175,8 @@ export default function Dashboard() {
 
     const incomePct   = pct(metrics.income,   compMetrics.income)
     const expensesPct = pct(metrics.expenses, compMetrics.expenses)
-    const netDiff     = metrics.netFlow - compMetrics.netFlow
+    const hasCompData = compMetrics.income > 0 || compMetrics.expenses > 0 || compMetrics.savings > 0
+    const netDiff     = hasCompData ? metrics.netFlow - compMetrics.netFlow : null
     const rateDiff    = metrics.savingsRate !== null && compMetrics.savingsRate !== null
       ? metrics.savingsRate - compMetrics.savingsRate
       : null
@@ -148,8 +185,8 @@ export default function Dashboard() {
       label,
       income:      { delta: fmtPct(incomePct),   good: incomePct   === null ? undefined : incomePct   >= 0 },
       expenses:    { delta: fmtPct(expensesPct),  good: expensesPct === null ? undefined : expensesPct <= 0 },
-      netFlow:     { delta: netDiff !== 0 ? `${netDiff >= 0 ? '↑' : '↓'} ${formatCurrency(Math.abs(netDiff))}` : null,
-                     good: netDiff >= 0 },
+      netFlow:     { delta: netDiff !== null && netDiff !== 0 ? `${netDiff >= 0 ? '↑' : '↓'} ${formatCurrency(Math.abs(netDiff))}` : null,
+                     good: netDiff !== null ? netDiff >= 0 : undefined },
       savingsRate: { delta: rateDiff !== null ? `${rateDiff >= 0 ? '↑' : '↓'} ${Math.abs(rateDiff).toFixed(1)}pp` : null,
                      good: rateDiff !== null ? rateDiff >= 0 : undefined },
     }
@@ -159,7 +196,7 @@ export default function Dashboard() {
 
   const yearData = useMemo<MonthlyTrendPoint[]>(() => {
     const slots: MonthlyTrendPoint[] = Array.from({ length: 12 }, (_, i) => ({
-      label:  `${MONTH_SHORT[i]} '${String(selectedYear).slice(2)}`,
+      label:  MONTH_SHORT[i],
       year:   selectedYear,
       month:  i + 1,
       income: 0, expenses: 0, savings: 0, savingsRate: 0,
@@ -179,20 +216,10 @@ export default function Dashboard() {
 
   // ── Trend sidebar data ────────────────────────────────────────────────────
 
-  const CATEGORY_PALETTE = [
-    '#6366f1','#8b5cf6','#ec4899','#f43f5e',
-    '#f97316','#eab308','#06b6d4','#3b82f6',
-    '#84cc16','#10b981',
-  ]
-
-  const recurringVsOneOff = useMemo(() => {
-    const recurring = transactions.filter(t => t.type === 'expense' && t.recurrence !== null).reduce((s, t) => s + t.amount, 0)
-    const total     = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
-    return { recurring, oneOff: total - recurring }
-  }, [transactions])
-
   const categoryAverages = useMemo<CategoryAvg[]>(() => {
-    const expenseTx = transactions.filter(t => t.type === 'expense')
+    const expenseTx = transactions.filter(t =>
+      t.type === 'expense' && (selectedYear !== currentYear || t.month <= currentMonth)
+    )
     const monthsWithData = new Set(expenseTx.map(t => `${t.year}-${t.month}`)).size || 1
     const totals: Record<string, number> = {}
     for (const t of expenseTx) totals[t.category] = (totals[t.category] ?? 0) + t.amount
@@ -200,10 +227,10 @@ export default function Dashboard() {
       .map(([category, total], i) => ({
         category,
         avgPerMonth: total / monthsWithData,
-        color: CATEGORY_PALETTE[i % CATEGORY_PALETTE.length],
+        color: categoryColor(i),
       }))
       .sort((a, b) => b.avgPerMonth - a.avgPerMonth)
-  }, [transactions])
+  }, [transactions, selectedYear])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -238,9 +265,9 @@ export default function Dashboard() {
       )}
 
       {/* Metrics row */}
-      <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
         {loading ? (
-          Array.from({ length: 5 }).map((_, i) => <MetricSkeleton key={i} />)
+          Array.from({ length: 4 }).map((_, i) => <MetricSkeleton key={i} />)
         ) : (
           <>
             <MetricCard
@@ -263,6 +290,9 @@ export default function Dashboard() {
               label="Net Cash Flow"
               value={netFlowValue}
               color={metrics.netFlow >= 0 ? 'green' : 'red'}
+              info={!selectedMonth && selectedYear === currentYear
+                ? 'Future-dated transactions are excluded.'
+                : undefined}
               delta={deltas?.netFlow.delta ?? undefined}
               deltaGood={deltas?.netFlow.good}
               deltaLabel={deltas?.label}
@@ -271,16 +301,11 @@ export default function Dashboard() {
               label="Savings Rate"
               value={metrics.savingsRate !== null ? `${metrics.savingsRate.toFixed(1)}%` : '—'}
               subLabel={metrics.savingsRate === null ? 'No income recorded' : undefined}
+              info="Logged savings ÷ income. Only includes transactions explicitly tagged as savings."
               color="indigo"
               delta={deltas?.savingsRate.delta ?? undefined}
               deltaGood={deltas?.savingsRate.good}
               deltaLabel={deltas?.label}
-            />
-            <MetricCard
-              label="Committed / mo"
-              value={metrics.committed > 0 ? formatCurrency(metrics.committed) : '—'}
-              subLabel="recurring expenses"
-              color="gray"
             />
           </>
         )}
@@ -337,15 +362,30 @@ export default function Dashboard() {
         {/* Trends View */}
         {chartView === 'trend' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-5 flex flex-col min-h-[360px]">
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4 shrink-0">
-                Trends View
-              </p>
-              {loading ? (
-                <div className="flex-1 min-h-[280px] rounded-lg bg-gray-50 dark:bg-gray-800/50 animate-pulse" />
-              ) : (
-                <MonthlyTrendsChart data={yearData} />
-              )}
+            <div className="lg:col-span-2 flex flex-col gap-4 min-h-[380px]">
+              {/* Income vs Expenses */}
+              <div className="flex-1 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-4 flex flex-col min-h-0">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3 shrink-0">
+                  Income vs Expenses
+                </p>
+                {loading ? (
+                  <div className="flex-1 rounded-lg bg-gray-50 dark:bg-gray-800/50 animate-pulse" />
+                ) : (
+                  <div className="flex-1 min-h-0">
+                    <IncomeExpensesChart data={yearData} />
+                  </div>
+                )}
+              </div>
+              {/* Cumulative Savings */}
+              <div className="flex-1 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-4 flex flex-col min-h-0">
+                {loading ? (
+                  <div className="flex-1 rounded-lg bg-gray-50 dark:bg-gray-800/50 animate-pulse" />
+                ) : (
+                  <div className="flex-1 min-h-0">
+                    <CumulativeSavingsChart data={yearData} />
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex flex-col gap-4">
               {/* Category Breakdown */}
@@ -375,8 +415,10 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <RecurringVsOneOffBar
-                    recurring={recurringVsOneOff.recurring}
-                    oneOff={recurringVsOneOff.oneOff}
+                    committed={metrics.committed}
+                    avgMonthlyIncome={metrics.avgMonthlyIncome}
+                    committedByCategory={metrics.committedByCategory}
+                    categoryColorMap={Object.fromEntries(categoryAverages.map(c => [c.category, c.color]))}
                   />
                 )}
               </div>
