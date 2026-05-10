@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom'
 
 const links = [
-  { to: '/dashboard', label: 'Dashboard' },
-  { to: '/tracker', label: 'Tracker' },
-  { to: '/import', label: 'Import' },
-  { to: '/settings', label: 'Settings' },
+  { to: '/net-worth',  label: 'Net Worth'  },
+  { to: '/dashboard',  label: 'Dashboard'  },
+  { to: '/tracker',    label: 'Transactions' },
+  { to: '/import',     label: 'Import'     },
+  { to: '/settings',   label: 'Settings'   },
 ]
 
 export default function Nav() {

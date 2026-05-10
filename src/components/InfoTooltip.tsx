@@ -1,9 +1,10 @@
 interface Props {
   text: string
-  align?: 'left' | 'right'  // which side of the icon the tooltip appears on
+  align?: 'left' | 'right'
+  direction?: 'down' | 'up'
 }
 
-export default function InfoTooltip({ text, align = 'left' }: Props) {
+export default function InfoTooltip({ text, align = 'left', direction = 'down' }: Props) {
   return (
     <span
       className="relative inline-flex items-center group/tip"
@@ -15,7 +16,8 @@ export default function InfoTooltip({ text, align = 'left' }: Props) {
         </svg>
       </span>
       <span className={`
-        pointer-events-none absolute z-50 top-5 w-52
+        pointer-events-none absolute z-50 w-56
+        ${direction === 'up' ? 'bottom-6' : 'top-5'}
         ${align === 'left' ? 'right-0' : 'left-0'}
         rounded-lg border border-gray-200 dark:border-gray-700
         bg-white dark:bg-gray-900 shadow-lg
