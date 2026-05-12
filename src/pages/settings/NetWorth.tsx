@@ -1,4 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
+} from '@dnd-kit/core'
+import type { DragEndEvent } from '@dnd-kit/core'
+import {
+  arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency, formatDate } from '../../lib/format'
 import SettingsNav from '../../components/SettingsNav'
@@ -14,9 +22,10 @@ const ACCOUNT_TYPE_META: Record<AccountType, { label: string; badgeClass: string
   debt:       { label: 'Debt',       dot: '#ef4444', badgeClass: 'bg-red-50    dark:bg-red-950    text-red-700    dark:text-red-300'    },
 }
 
-const ACCOUNT_TYPES: AccountType[] = ['cash', 'savings', 'investment', 'retirement', 'debt']
-const SCHEDULE_TYPES: AccountType[] = ['investment', 'retirement']
-const FREQ_LABELS: Record<Recurrence, string> = { weekly: 'Weekly', monthly: 'Monthly', annual: 'Annual' }
+const ACCOUNT_TYPES: AccountType[]    = ['cash', 'savings', 'investment', 'retirement', 'debt']
+const SCHEDULE_TYPES: AccountType[]   = ['savings', 'investment', 'retirement']
+const GROWTH_RATE_TYPES: AccountType[] = ['savings', 'investment', 'retirement']
+const LIABILITY_SUBTYPES = ['Credit Card', 'Student Loan', 'Auto Loan', 'Mortgage', 'Personal Loan', 'Line of Credit']
 
 const FIELD = [
   'w-full text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2',
@@ -37,7 +46,6 @@ interface AccountWithMeta {
 type Modal =
   | { kind: 'account'; target: NetWorthAccount | null }
   | { kind: 'snapshot'; account: NetWorthAccount }
-  | { kind: 'schedule'; account: NetWorthAccount; existing: InvestmentContribution | null }
   | { kind: 'delete'; account: NetWorthAccount }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -93,16 +101,19 @@ export default function NetWorthSettings() {
   const d = new Date()
   const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
-  const [accounts, setAccounts] = useState<AccountWithMeta[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [pageError, setPageError] = useState<string | null>(null)
-  const [modal, setModal]       = useState<Modal | null>(null)
-  const [saving, setSaving]     = useState(false)
+  const [accounts, setAccounts]           = useState<AccountWithMeta[]>([])
+  const [closedAccounts, setClosedAccounts] = useState<AccountWithMeta[]>([])
+  const [loading, setLoading]             = useState(true)
+  const [pageError, setPageError]   = useState<string | null>(null)
+  const [modal, setModal]           = useState<Modal | null>(null)
+  const [saving, setSaving]         = useState(false)
   const [modalError, setModalError] = useState<string | null>(null)
 
   // Account form
-  const [acctName, setAcctName] = useState('')
-  const [acctType, setAcctType] = useState<AccountType>('cash')
+  const [acctName, setAcctName]             = useState('')
+  const [acctType, setAcctType]             = useState<AccountType>('cash')
+  const [acctSubtype, setAcctSubtype]       = useState<string | null>(null)
+  const [acctGrowthRate, setAcctGrowthRate] = useState('')
   const acctNameRef = useRef<HTMLInputElement>(null)
 
   // Snapshot form
@@ -111,22 +122,18 @@ export default function NetWorthSettings() {
   const [snapNotes, setSnapNotes]     = useState('')
   const snapBalanceRef = useRef<HTMLInputElement>(null)
 
-  // Contribution schedule form
+  // Contribution schedule (embedded in account form)
   const [schedAmt, setSchedAmt]   = useState('')
   const [schedFreq, setSchedFreq] = useState<Recurrence>('monthly')
-  const [schedStart, setSchedStart] = useState(today)
-  const schedAmtRef = useRef<HTMLInputElement>(null)
 
   // ── Data loading ─────────────────────────────────────────────────────────
 
   useEffect(() => { load() }, [])
 
-  // Focus first input when modal opens
   useEffect(() => {
     if (!modal) return
     if (modal.kind === 'account')  setTimeout(() => acctNameRef.current?.focus(), 50)
     if (modal.kind === 'snapshot') setTimeout(() => snapBalanceRef.current?.focus(), 50)
-    if (modal.kind === 'schedule') setTimeout(() => schedAmtRef.current?.focus(), 50)
   }, [modal])
 
   async function load() {
@@ -134,18 +141,18 @@ export default function NetWorthSettings() {
     setPageError(null)
 
     const [acctRes, snapRes, contribRes] = await Promise.all([
-      supabase.from('net_worth_accounts').select('*').eq('active', true).order('created_at'),
+      supabase.from('net_worth_accounts').select('*').eq('active', true).order('sort_order', { ascending: true, nullsFirst: false }).order('created_at'),
       supabase.from('net_worth_snapshots').select('*').order('snapshot_date', { ascending: false }),
       supabase.from('investment_contributions').select('*').is('end_date', null).order('created_at'),
     ])
 
     if (acctRes.error) { setPageError(acctRes.error.message); setLoading(false); return }
 
-    const accts      = (acctRes.data ?? []) as NetWorthAccount[]
-    const snaps      = (snapRes.data ?? []) as NetWorthSnapshot[]
-    const contribs   = (contribRes.data ?? []) as InvestmentContribution[]
+    const accts    = (acctRes.data ?? []) as NetWorthAccount[]
+    const snaps    = (snapRes.data ?? []) as NetWorthSnapshot[]
+    const contribs = (contribRes.data ?? []) as InvestmentContribution[]
 
-    const latestSnap  = new Map<string, NetWorthSnapshot>()
+    const latestSnap = new Map<string, NetWorthSnapshot>()
     for (const s of snaps) {
       if (!latestSnap.has(s.account_id)) latestSnap.set(s.account_id, s)
     }
@@ -155,23 +162,34 @@ export default function NetWorthSettings() {
       if (!latestContrib.has(c.account_id)) latestContrib.set(c.account_id, c)
     }
 
-    setAccounts(accts.map(a => ({
+    const toMeta = (a: NetWorthAccount) => ({
       account:        a,
       latestSnapshot: latestSnap.get(a.id) ?? null,
       contribution:   latestContrib.get(a.id) ?? null,
-    })))
+    })
+
+    setAccounts(accts.filter(a => !a.closed).map(toMeta))
+    setClosedAccounts(accts.filter(a => a.closed).map(toMeta))
     setLoading(false)
   }
 
   // ── Modal helpers ─────────────────────────────────────────────────────────
 
   function openAddAccount() {
-    setAcctName(''); setAcctType('cash'); setModalError(null)
+    setAcctName(''); setAcctType('cash'); setAcctSubtype(null); setAcctGrowthRate('')
+    setSchedAmt(''); setSchedFreq('monthly'); setModalError(null)
     setModal({ kind: 'account', target: null })
   }
 
   function openEditAccount(a: NetWorthAccount) {
-    setAcctName(a.name); setAcctType(a.type); setModalError(null)
+    const existing = accounts.find(r => r.account.id === a.id)?.contribution ?? null
+    setAcctName(a.name)
+    setAcctType(a.type)
+    setAcctSubtype(a.subtype ?? null)
+    setAcctGrowthRate(a.growth_rate != null ? String(parseFloat((a.growth_rate * 100).toFixed(4))) : '')
+    setSchedAmt(existing ? String(existing.amount) : '')
+    setSchedFreq(existing?.frequency ?? 'monthly')
+    setModalError(null)
     setModal({ kind: 'account', target: a })
   }
 
@@ -181,14 +199,6 @@ export default function NetWorthSettings() {
     setSnapNotes(existing?.notes ?? '')
     setModalError(null)
     setModal({ kind: 'snapshot', account: a })
-  }
-
-  function openSchedule(a: NetWorthAccount, existing: InvestmentContribution | null) {
-    setSchedAmt(existing ? String(existing.amount) : '')
-    setSchedFreq(existing?.frequency ?? 'monthly')
-    setSchedStart(existing?.start_date ?? today)
-    setModalError(null)
-    setModal({ kind: 'schedule', account: a, existing })
   }
 
   function closeModal() { setModal(null); setModalError(null) }
@@ -201,13 +211,63 @@ export default function NetWorthSettings() {
     if (modal?.kind !== 'account') return
     setSaving(true); setModalError(null)
 
+    const supportsGrowthRate = GROWTH_RATE_TYPES.includes(acctType)
+    const parsedRate = parseFloat(acctGrowthRate)
+    const growth_rate = supportsGrowthRate && !isNaN(parsedRate) && parsedRate > 0
+      ? parsedRate / 100
+      : null
+
+    const subtype = acctType === 'debt' ? acctSubtype : null
+
     const isEdit = modal.target !== null
-    const { error } = isEdit
-      ? await supabase.from('net_worth_accounts').update({ name, type: acctType }).eq('id', modal.target!.id)
-      : await supabase.from('net_worth_accounts').insert({ name, type: acctType })
+    let accountId: string
+
+    if (isEdit) {
+      const { error } = await supabase.from('net_worth_accounts')
+        .update({ name, type: acctType, growth_rate, subtype })
+        .eq('id', modal.target!.id)
+      if (error) { setSaving(false); setModalError(error.message); return }
+      accountId = modal.target!.id
+    } else {
+      const { data, error } = await supabase.from('net_worth_accounts')
+        .insert({ name, type: acctType, growth_rate, subtype })
+        .select()
+        .single()
+      if (error) { setSaving(false); setModalError(error.message); return }
+      accountId = (data as NetWorthAccount).id
+    }
+
+    // Handle contribution schedule for supported account types
+    if (SCHEDULE_TYPES.includes(acctType)) {
+      const existingContrib = accounts.find(r => r.account.id === accountId)?.contribution ?? null
+      const amount = parseFloat(schedAmt)
+
+      if (!isNaN(amount) && amount > 0) {
+        const scheduleChanged = !existingContrib ||
+          existingContrib.amount !== amount ||
+          existingContrib.frequency !== schedFreq
+
+        if (scheduleChanged) {
+          if (existingContrib) {
+            await supabase.from('investment_contributions')
+              .update({ end_date: today })
+              .eq('id', existingContrib.id)
+          }
+          await supabase.from('investment_contributions').insert({
+            account_id: accountId,
+            amount,
+            frequency:  schedFreq,
+            start_date: today,
+          })
+        }
+      } else if (existingContrib) {
+        await supabase.from('investment_contributions')
+          .update({ end_date: today })
+          .eq('id', existingContrib.id)
+      }
+    }
 
     setSaving(false)
-    if (error) { setModalError(error.message); return }
     closeModal(); await load()
   }
 
@@ -229,39 +289,16 @@ export default function NetWorthSettings() {
     closeModal(); await load()
   }
 
-  async function saveSchedule() {
-    if (modal?.kind !== 'schedule') return
-    const amount = parseFloat(schedAmt)
-    if (isNaN(amount) || amount <= 0) { setModalError('Enter a valid amount.'); return }
-    setSaving(true); setModalError(null)
-
-    // End any existing active schedule before inserting the new one
-    if (modal.existing) {
-      await supabase.from('investment_contributions')
-        .update({ end_date: today })
-        .eq('id', modal.existing.id)
-    }
-
-    const { error } = await supabase.from('investment_contributions').insert({
-      account_id: modal.account.id,
-      amount,
-      frequency:  schedFreq,
-      start_date: schedStart,
-    })
-
-    setSaving(false)
-    if (error) { setModalError(error.message); return }
-    closeModal(); await load()
+  async function closeAccount(id: string) {
+    const { error } = await supabase.from('net_worth_accounts').update({ closed: true }).eq('id', id)
+    if (error) { setPageError(error.message); return }
+    setModal(null); await load()
   }
 
-  async function removeSchedule() {
-    if (modal?.kind !== 'schedule' || !modal.existing) return
-    setSaving(true)
-    await supabase.from('investment_contributions')
-      .update({ end_date: today })
-      .eq('id', modal.existing.id)
-    setSaving(false)
-    closeModal(); await load()
+  async function reopenAccount(id: string) {
+    const { error } = await supabase.from('net_worth_accounts').update({ closed: false }).eq('id', id)
+    if (error) { setPageError(error.message); return }
+    await load()
   }
 
   async function deleteAccount(id: string) {
@@ -270,12 +307,22 @@ export default function NetWorthSettings() {
     setModal(null); await load()
   }
 
+  async function handleReorder(reordered: AccountWithMeta[]) {
+    // Update state immediately for a responsive feel
+    const ids = new Set(reordered.map(r => r.account.id))
+    setAccounts([...accounts.filter(r => !ids.has(r.account.id)), ...reordered])
+    // Persist sort_order for the reordered group
+    await Promise.all(reordered.map((item, index) =>
+      supabase.from('net_worth_accounts').update({ sort_order: index }).eq('id', item.account.id)
+    ))
+  }
+
   // ── Grouping ──────────────────────────────────────────────────────────────
 
   const assets      = accounts.filter(a => a.account.type !== 'debt')
   const liabilities = accounts.filter(a => a.account.type === 'debt')
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
@@ -328,27 +375,61 @@ export default function NetWorthSettings() {
         </div>
       ) : (
         <div className="mt-4 space-y-6">
-          {/* Assets */}
           {assets.length > 0 && (
             <AccountGroup
               title="Assets"
               items={assets}
               onEdit={openEditAccount}
               onLogBalance={(a, snap) => openSnapshot(a, snap)}
-              onSchedule={(a, c) => openSchedule(a, c)}
               onDelete={(a) => setModal({ kind: 'delete', account: a })}
+              onReorder={handleReorder}
             />
           )}
-          {/* Liabilities */}
           {liabilities.length > 0 && (
             <AccountGroup
               title="Liabilities"
               items={liabilities}
               onEdit={openEditAccount}
               onLogBalance={(a, snap) => openSnapshot(a, snap)}
-              onSchedule={null}
               onDelete={(a) => setModal({ kind: 'delete', account: a })}
+              onReorder={handleReorder}
             />
+          )}
+          {closedAccounts.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Closed</p>
+              <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
+                {closedAccounts.map(({ account, latestSnapshot }) => {
+                  const meta = ACCOUNT_TYPE_META[account.type]
+                  return (
+                    <div key={account.id} className="px-5 py-4 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0 opacity-40" style={{ backgroundColor: meta.dot }} />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-400 dark:text-gray-500 truncate">{account.name}</span>
+                            <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full opacity-50 ${meta.badgeClass}`}>
+                              {account.type === 'debt' && account.subtype ? account.subtype : meta.label}
+                            </span>
+                          </div>
+                          {latestSnapshot && (
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                              {formatCurrency(latestSnapshot.balance)} · closed {formatDate(latestSnapshot.snapshot_date)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => reopenAccount(account.id)}
+                        className="px-2.5 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-md hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600 transition-colors shrink-0"
+                      >
+                        Reopen
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -360,6 +441,7 @@ export default function NetWorthSettings() {
           title={modal.target ? 'Edit Account' : 'Add Account'}
           onClose={closeModal}
         >
+          {/* Name */}
           <div>
             <label className={LABEL}>Account name</label>
             <input
@@ -372,6 +454,8 @@ export default function NetWorthSettings() {
               className={FIELD}
             />
           </div>
+
+          {/* Type */}
           <div>
             <label className={LABEL}>Account type</label>
             <div className="grid grid-cols-2 gap-2">
@@ -381,7 +465,7 @@ export default function NetWorthSettings() {
                   <button
                     key={t}
                     type="button"
-                    onClick={() => setAcctType(t)}
+                    onClick={() => { setAcctType(t); if (t !== 'debt') setAcctSubtype(null) }}
                     className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-colors text-left ${
                       acctType === t
                         ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300'
@@ -395,6 +479,94 @@ export default function NetWorthSettings() {
               })}
             </div>
           </div>
+
+          {/* Liability subtype */}
+          {acctType === 'debt' && (
+            <div>
+              <label className={LABEL}>
+                Liability type <span className="font-normal text-gray-400">(optional)</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {LIABILITY_SUBTYPES.map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setAcctSubtype(acctSubtype === s ? null : s)}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                      acctSubtype === s
+                        ? 'border-red-400 bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300'
+                        : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Recurring contribution */}
+          {SCHEDULE_TYPES.includes(acctType) && (
+            <div>
+              <label className={LABEL}>
+                Recurring contribution <span className="font-normal text-gray-400">(optional)</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">$</span>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={schedAmt}
+                  onChange={e => setSchedAmt(e.target.value)}
+                  className={FIELD + ' pl-6'}
+                />
+              </div>
+              <div className="flex gap-2 mt-2">
+                {(['weekly', 'monthly', 'annual'] as Recurrence[]).map(f => (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setSchedFreq(f)}
+                    className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                      schedFreq === f
+                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300'
+                        : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
+                    }`}
+                  >
+                    {f === 'weekly' ? 'Weekly' : f === 'monthly' ? 'Monthly' : 'Annual'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Annual rate */}
+          {GROWTH_RATE_TYPES.includes(acctType) && (
+            <div>
+              <label className={LABEL}>
+                Annual rate <span className="font-normal text-gray-400">(optional)</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  placeholder="e.g. 7"
+                  value={acctGrowthRate}
+                  onChange={e => setAcctGrowthRate(e.target.value)}
+                  className={FIELD + ' pr-8'}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+              </div>
+              <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
+                The expected yearly return or interest rate for this account.
+              </p>
+            </div>
+          )}
+
           {modalError && <p className="text-xs text-red-600 dark:text-red-400">{modalError}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <button onClick={closeModal} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
@@ -469,97 +641,34 @@ export default function NetWorthSettings() {
         </ModalShell>
       )}
 
-      {modal?.kind === 'schedule' && (
-        <ModalShell title={`Contribution Schedule — ${modal.account.name}`} onClose={closeModal}>
-          <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1">
-            Recurring contributions help track committed spend against this account.
-          </p>
-          <div>
-            <label className={LABEL}>Amount per contribution</label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">$</span>
-              <input
-                ref={schedAmtRef}
-                type="number"
-                min="0.01"
-                step="0.01"
-                placeholder="0.00"
-                value={schedAmt}
-                onChange={e => setSchedAmt(e.target.value)}
-                className={FIELD + ' pl-6'}
-              />
-            </div>
-          </div>
-          <div>
-            <label className={LABEL}>Frequency</label>
-            <div className="flex gap-2">
-              {(['weekly', 'monthly', 'annual'] as Recurrence[]).map(f => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => setSchedFreq(f)}
-                  className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                    schedFreq === f
-                      ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300'
-                      : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300'
-                  }`}
-                >
-                  {FREQ_LABELS[f]}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className={LABEL}>Starting from</label>
-            <input
-              type="date"
-              value={schedStart}
-              onChange={e => setSchedStart(e.target.value)}
-              className={FIELD}
-            />
-          </div>
-          {modalError && <p className="text-xs text-red-600 dark:text-red-400">{modalError}</p>}
-          <div className="flex items-center justify-between pt-1">
-            {modal.existing ? (
-              <button
-                onClick={removeSchedule}
-                disabled={saving}
-                className="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-40"
-              >
-                Remove schedule
-              </button>
-            ) : <span />}
-            <div className="flex gap-2">
-              <button onClick={closeModal} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-                Cancel
-              </button>
-              <button
-                onClick={saveSchedule}
-                disabled={saving || !schedAmt}
-                className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {saving ? 'Saving…' : 'Save Schedule'}
-              </button>
-            </div>
-          </div>
-        </ModalShell>
-      )}
-
       {modal?.kind === 'delete' && (
-        <ModalShell title="Delete Account?" onClose={closeModal}>
+        <ModalShell title="Remove Account?" onClose={closeModal}>
           <p className="text-sm text-gray-600 dark:text-gray-300">
-            Removing <strong>{modal.account.name}</strong> will hide it from your net worth.
-            Historical snapshots are preserved.
+            How would you like to remove <strong>{modal.account.name}</strong>?
           </p>
-          <div className="flex justify-end gap-2 pt-1">
-            <button onClick={closeModal} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-              Cancel
+          <div className="space-y-2">
+            <button
+              onClick={() => closeAccount(modal.account.id)}
+              className="w-full text-left px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
+            >
+              <p className="text-sm font-medium text-gray-900 dark:text-white">Close account</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Hides from your active net worth. Balance history is preserved.
+              </p>
             </button>
             <button
               onClick={() => deleteAccount(modal.account.id)}
-              className="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              className="w-full text-left px-4 py-3 rounded-lg border border-red-100 dark:border-red-900/30 hover:border-red-200 dark:hover:border-red-800 transition-colors"
             >
-              Delete
+              <p className="text-sm font-medium text-red-600 dark:text-red-400">Delete account</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Removes entirely. Use for accounts added by mistake.
+              </p>
+            </button>
+          </div>
+          <div className="flex justify-end pt-1">
+            <button onClick={closeModal} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+              Cancel
             </button>
           </div>
         </ModalShell>
@@ -575,91 +684,148 @@ interface GroupProps {
   items: AccountWithMeta[]
   onEdit: (a: NetWorthAccount) => void
   onLogBalance: (a: NetWorthAccount, snap: NetWorthSnapshot | null) => void
-  onSchedule: ((a: NetWorthAccount, c: InvestmentContribution | null) => void) | null
   onDelete: (a: NetWorthAccount) => void
+  onReorder: (reordered: AccountWithMeta[]) => void
 }
 
-function AccountGroup({ title, items, onEdit, onLogBalance, onSchedule, onDelete }: GroupProps) {
+function GripIcon() {
+  return (
+    <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
+      <circle cx="2" cy="2"  r="1.5" /><circle cx="8" cy="2"  r="1.5" />
+      <circle cx="2" cy="7"  r="1.5" /><circle cx="8" cy="7"  r="1.5" />
+      <circle cx="2" cy="12" r="1.5" /><circle cx="8" cy="12" r="1.5" />
+    </svg>
+  )
+}
+
+function SortableAccountRow({
+  item, onEdit, onLogBalance, onDelete,
+}: {
+  item: AccountWithMeta
+  onEdit: (a: NetWorthAccount) => void
+  onLogBalance: (a: NetWorthAccount, snap: NetWorthSnapshot | null) => void
+  onDelete: (a: NetWorthAccount) => void
+}) {
+  const { account, latestSnapshot } = item
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: account.id })
+
+  const meta      = ACCOUNT_TYPE_META[account.type]
+  const isPaidOff = account.type === 'debt' && latestSnapshot !== null && latestSnapshot.balance === 0
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+      className="px-5 py-4 bg-white dark:bg-gray-900"
+    >
+      <div className="flex items-center justify-between gap-3">
+        {/* Drag handle + left content */}
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            {...attributes}
+            {...listeners}
+            tabIndex={-1}
+            className="p-1 text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none shrink-0"
+          >
+            <GripIcon />
+          </button>
+          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: meta.dot }} />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{account.name}</span>
+              <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${meta.badgeClass}`}>
+                {account.type === 'debt' && account.subtype ? account.subtype : meta.label}
+              </span>
+            </div>
+            {latestSnapshot ? (
+              isPaidOff ? (
+                <>
+                  <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">
+                    Paid off ✓
+                    <span className="ml-1 text-gray-400 dark:text-gray-500">
+                      · {formatDate(latestSnapshot.snapshot_date)}
+                    </span>
+                  </p>
+                  <button
+                    onClick={() => onDelete(account)}
+                    className="text-xs text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors mt-0.5"
+                  >
+                    Close account →
+                  </button>
+                </>
+              ) : (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  {formatCurrency(latestSnapshot.balance)}
+                  <span className="ml-1 text-gray-400 dark:text-gray-500">
+                    as of {formatDate(latestSnapshot.snapshot_date)}
+                  </span>
+                </p>
+              )
+            ) : (
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">No balance logged yet</p>
+            )}
+          </div>
+        </div>
+
+        {/* Right: actions */}
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => onLogBalance(account, latestSnapshot)}
+            className="px-2.5 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors"
+          >
+            Log Balance
+          </button>
+          <button
+            onClick={() => onEdit(account)}
+            className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+            title="Edit"
+          >
+            <PencilIcon />
+          </button>
+          <button
+            onClick={() => onDelete(account)}
+            className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+            title="Delete"
+          >
+            <TrashIcon />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AccountGroup({ title, items, onEdit, onLogBalance, onDelete, onReorder }: GroupProps) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = items.findIndex(r => r.account.id === active.id)
+    const newIndex = items.findIndex(r => r.account.id === over.id)
+    if (oldIndex !== -1 && newIndex !== -1) onReorder(arrayMove(items, oldIndex, newIndex))
+  }
+
   return (
     <div>
       <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">{title}</p>
       <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
-        {items.map(({ account, latestSnapshot, contribution }) => {
-          const meta = ACCOUNT_TYPE_META[account.type]
-          const showSchedule = onSchedule !== null && SCHEDULE_TYPES.includes(account.type)
-          return (
-            <div key={account.id} className="px-5 py-4">
-              <div className="flex items-start justify-between gap-3">
-                {/* Left: name + meta */}
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0 mt-0.5" style={{ backgroundColor: meta.dot }} />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{account.name}</span>
-                      <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${meta.badgeClass}`}>
-                        {meta.label}
-                      </span>
-                    </div>
-                    {latestSnapshot ? (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                        {formatCurrency(latestSnapshot.balance)}
-                        <span className="ml-1 text-gray-400 dark:text-gray-500">
-                          as of {formatDate(latestSnapshot.snapshot_date)}
-                        </span>
-                      </p>
-                    ) : (
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">No balance logged yet</p>
-                    )}
-                    {contribution && (
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                        {formatCurrency(contribution.amount)}/{contribution.frequency === 'annual' ? 'yr' : contribution.frequency === 'weekly' ? 'wk' : 'mo'} contribution
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Right: actions */}
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => onLogBalance(account, latestSnapshot)}
-                    className="px-2.5 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors"
-                  >
-                    Log Balance
-                  </button>
-                  {showSchedule && (
-                    <button
-                      onClick={() => onSchedule!(account, contribution)}
-                      title="Contribution schedule"
-                      className={`p-1.5 rounded-md border transition-colors ${
-                        contribution
-                          ? 'border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50'
-                          : 'border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
-                      }`}
-                    >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                      </svg>
-                    </button>
-                  )}
-                  <button
-                    onClick={() => onEdit(account)}
-                    className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-                    title="Edit"
-                  >
-                    <PencilIcon />
-                  </button>
-                  <button
-                    onClick={() => onDelete(account)}
-                    className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-                    title="Delete"
-                  >
-                    <TrashIcon />
-                  </button>
-                </div>
-              </div>
-            </div>
-          )
-        })}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={items.map(r => r.account.id)} strategy={verticalListSortingStrategy}>
+            {items.map(item => (
+              <SortableAccountRow
+                key={item.account.id}
+                item={item}
+                onEdit={onEdit}
+                onLogBalance={onLogBalance}
+                onDelete={onDelete}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
       </div>
     </div>
   )

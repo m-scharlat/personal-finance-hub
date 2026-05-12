@@ -1,4 +1,5 @@
 import NetWorthWidget from '../components/dashboard/NetWorthWidget'
+import NetWorthChart from '../components/dashboard/NetWorthChart'
 
 export default function NetWorth() {
   return (
@@ -8,6 +9,9 @@ export default function NetWorth() {
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Your overall financial position at a glance.</p>
       </div>
       <NetWorthWidget />
+      <div className="mt-6">
+        <NetWorthChart />
+      </div>
     </div>
   )
 }

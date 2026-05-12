@@ -9,7 +9,7 @@ import InfoTooltip from '../InfoTooltip'
 import type { MonthlyTrendPoint } from '../../types'
 
 const SAVINGS_COLOR   = '#818cf8'
-const NET_COLOR       = '#d4a843'
+const NET_COLOR       = '#14b8a6'
 const AXIS_COLOR      = '#9ca3af'
 const GRID_COLOR      = 'rgba(148,163,184,0.10)'
 

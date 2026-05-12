@@ -18,6 +18,27 @@ interface AccountRow {
   contribution: InvestmentContribution | null
 }
 
+function daysSince(dateStr: string): number {
+  const snap = new Date(dateStr + 'T00:00:00').getTime()
+  const now  = new Date().setHours(0, 0, 0, 0)
+  return Math.floor((now - snap) / 86_400_000)
+}
+
+function effectiveBalance(snapshot: NetWorthSnapshot | null, growthRate: number | null): number {
+  if (!snapshot) return 0
+  if (!growthRate || growthRate <= 0) return snapshot.balance
+  const days = daysSince(snapshot.snapshot_date)
+  return snapshot.balance * Math.pow(1 + growthRate, days / 365)
+}
+
+function stalenessLabel(days: number): string {
+  if (days === 0) return 'logged today'
+  if (days === 1) return 'logged yesterday'
+  if (days < 30)  return `logged ${days}d ago`
+  if (days < 365) return `logged ${Math.floor(days / 30)}mo ago`
+  return `logged ${(days / 365).toFixed(1)}yr ago`
+}
+
 export default function NetWorthWidget() {
   const [rows, setRows]       = useState<AccountRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -25,7 +46,7 @@ export default function NetWorthWidget() {
   useEffect(() => {
     async function load() {
       const [acctRes, snapRes, contribRes] = await Promise.all([
-        supabase.from('net_worth_accounts').select('*').eq('active', true).order('created_at'),
+        supabase.from('net_worth_accounts').select('*').eq('active', true).eq('closed', false).order('sort_order', { ascending: true, nullsFirst: false }).order('created_at'),
         supabase.from('net_worth_snapshots').select('*').order('snapshot_date', { ascending: false }),
         supabase.from('investment_contributions').select('*').is('end_date', null).order('created_at'),
       ])
@@ -54,21 +75,23 @@ export default function NetWorthWidget() {
     load()
   }, [])
 
-  const assetRows     = rows.filter(r => r.account.type !== 'debt')
-  const liabRows      = rows.filter(r => r.account.type === 'debt')
-  const totalAssets   = assetRows.reduce((s, r) => s + (r.latestSnapshot?.balance ?? 0), 0)
-  const totalLiab     = liabRows.reduce((s, r) => s + (r.latestSnapshot?.balance ?? 0), 0)
-  const netWorth      = totalAssets - totalLiab
+  const assetRows   = rows.filter(r => r.account.type !== 'debt')
+  const liabRows    = rows.filter(r => r.account.type === 'debt')
 
-  // Most recent snapshot date across all accounts (for "as of" display)
+  const totalAssets = assetRows.reduce((s, r) => s + effectiveBalance(r.latestSnapshot, r.account.growth_rate), 0)
+  const totalLiab   = liabRows.reduce((s, r)  => s + effectiveBalance(r.latestSnapshot, r.account.growth_rate), 0)
+  const netWorth    = totalAssets - totalLiab
+
+  const anyEstimated = rows.some(r => r.account.growth_rate && r.latestSnapshot)
+
+  // Most recent snapshot date across all accounts
   const sortedDates = rows
     .map(r => r.latestSnapshot?.snapshot_date)
     .filter((d): d is string => Boolean(d))
     .sort()
   const latestDate = sortedDates.length > 0 ? sortedDates[sortedDates.length - 1] : null
 
-  // Max balance for sizing the relative bars
-  const maxBalance = Math.max(...rows.map(r => r.latestSnapshot?.balance ?? 0), 1)
+  const maxBalance = Math.max(...rows.map(r => effectiveBalance(r.latestSnapshot, r.account.growth_rate)), 1)
 
   if (loading) {
     return (
@@ -111,11 +134,9 @@ export default function NetWorthWidget() {
                 <p className={`mt-2 text-3xl font-semibold tabular-nums ${netWorth >= 0 ? 'text-gray-900 dark:text-white' : 'text-red-500'}`}>
                   {netWorth >= 0 ? '' : '−'}{formatCurrency(Math.abs(netWorth))}
                 </p>
-                {latestDate && (
-                  <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                    as of {formatDate(latestDate)}
-                  </p>
-                )}
+                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                  {anyEstimated ? 'estimated as of today' : latestDate ? `as of ${formatDate(latestDate)}` : ''}
+                </p>
               </>
             ) : (
               <p className="mt-2 text-sm text-gray-400 dark:text-gray-500">No balances logged yet.</p>
@@ -153,7 +174,6 @@ export default function NetWorthWidget() {
         <div className="px-6 py-5">
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">Breakdown</p>
           <div className="space-y-3">
-            {/* Assets */}
             {assetRows.map(({ account, latestSnapshot, contribution }) => (
               <AccountBar
                 key={account.id}
@@ -164,7 +184,6 @@ export default function NetWorthWidget() {
                 isLiability={false}
               />
             ))}
-            {/* Liabilities */}
             {liabRows.map(({ account, latestSnapshot, contribution }) => (
               <AccountBar
                 key={account.id}
@@ -192,9 +211,12 @@ function AccountBar({
   maxBalance: number
   isLiability: boolean
 }) {
-  const meta    = ACCOUNT_TYPE_META[account.type]
-  const balance = snapshot?.balance ?? 0
-  const pct     = maxBalance > 0 ? (balance / maxBalance) * 100 : 0
+  const meta       = ACCOUNT_TYPE_META[account.type]
+  const isEst      = Boolean(account.growth_rate && snapshot)
+  const balance    = effectiveBalance(snapshot, account.growth_rate)
+  const pct        = maxBalance > 0 ? (balance / maxBalance) * 100 : 0
+  const days       = snapshot ? daysSince(snapshot.snapshot_date) : null
+  const isPaidOff  = isLiability && snapshot !== null && snapshot.balance === 0
 
   return (
     <div>
@@ -202,25 +224,45 @@ function AccountBar({
         <div className="flex items-center gap-2 min-w-0">
           <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: meta.dot }} />
           <span className="text-sm text-gray-800 dark:text-gray-200 truncate">{account.name}</span>
+          {isPaidOff && (
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400 shrink-0">
+              Paid off ✓
+            </span>
+          )}
           {contribution && (
             <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">
               +{formatCurrency(contribution.amount)}/{contribution.frequency === 'annual' ? 'yr' : contribution.frequency === 'weekly' ? 'wk' : 'mo'}
             </span>
           )}
         </div>
-        <span className={`text-sm font-medium tabular-nums shrink-0 ml-3 ${
-          isLiability ? 'text-red-500 dark:text-red-400' : 'text-gray-900 dark:text-white'
-        }`}>
-          {snapshot ? (isLiability ? '−' : '') + formatCurrency(balance) : '—'}
-        </span>
-      </div>
-      {snapshot && (
-        <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{ width: `${Math.max(pct, 1)}%`, backgroundColor: meta.dot, opacity: isLiability ? 0.5 : 0.75 }}
-          />
+        <div className="flex items-center gap-1.5 ml-3 shrink-0">
+          {isEst && !isPaidOff && (
+            <span className="text-[10px] font-medium text-indigo-400 dark:text-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 px-1.5 py-0.5 rounded-full">
+              est.
+            </span>
+          )}
+          <span className={`text-sm font-medium tabular-nums ${
+            isPaidOff ? 'text-green-600 dark:text-green-400' :
+            isLiability ? 'text-red-500 dark:text-red-400' : 'text-gray-900 dark:text-white'
+          }`}>
+            {snapshot ? (isLiability && !isPaidOff ? '−' : '') + formatCurrency(balance) : '—'}
+          </span>
         </div>
+      </div>
+      {snapshot && !isPaidOff && (
+        <>
+          <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${Math.max(pct, 1)}%`, backgroundColor: meta.dot, opacity: isLiability ? 0.5 : 0.75 }}
+            />
+          </div>
+          {isEst && days !== null && days > 0 && (
+            <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">
+              {stalenessLabel(days)}
+            </p>
+          )}
+        </>
       )}
     </div>
   )

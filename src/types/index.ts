@@ -49,7 +49,11 @@ export interface NetWorthAccount {
   id: string
   name: string
   type: AccountType
+  subtype: string | null
+  sort_order: number | null
   active: boolean
+  closed: boolean
+  growth_rate: number | null
   created_at: string
 }
 
