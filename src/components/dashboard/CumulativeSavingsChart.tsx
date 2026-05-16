@@ -126,7 +126,7 @@ export default function CumulativeSavingsChart({ data }: Props) {
   const yMax = Math.max(...chartData.map(d => (showNet ? d.netSavings : d.cumulative) ?? 0), 1)
   const { ticks: yTicks, domain: yDomain } = niceYAxis(yMax)
 
-  const glowColor  = showNet ? `rgba(212,168,67,0.55)` : `rgba(129,140,248,0.45)`
+  const glowColor  = showNet ? `rgba(20,184,166,0.45)` : `rgba(129,140,248,0.45)`
   const trackColor = showNet ? NET_COLOR : SAVINGS_COLOR
 
   return (

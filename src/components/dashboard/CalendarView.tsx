@@ -126,7 +126,7 @@ export default function CalendarView({ data, year }: Props) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
-                      <span className="text-[10px] text-gray-400 dark:text-gray-500">Logged</span>
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500">Net Savings</span>
                     </div>
                     <span className="text-[11px] font-semibold tabular-nums text-indigo-600 dark:text-indigo-400">
                       {formatCurrency(point.savings)}
