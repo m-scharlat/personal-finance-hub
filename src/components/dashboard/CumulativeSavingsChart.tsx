@@ -9,7 +9,7 @@ import InfoTooltip from '../InfoTooltip'
 import type { MonthlyTrendPoint } from '../../types'
 
 const SAVINGS_COLOR   = '#818cf8'
-const NET_COLOR       = '#d4a843'
+const NET_COLOR       = '#14b8a6'
 const AXIS_COLOR      = '#9ca3af'
 const GRID_COLOR      = 'rgba(148,163,184,0.10)'
 
@@ -126,7 +126,7 @@ export default function CumulativeSavingsChart({ data }: Props) {
   const yMax = Math.max(...chartData.map(d => (showNet ? d.netSavings : d.cumulative) ?? 0), 1)
   const { ticks: yTicks, domain: yDomain } = niceYAxis(yMax)
 
-  const glowColor  = showNet ? `rgba(212,168,67,0.55)` : `rgba(129,140,248,0.45)`
+  const glowColor  = showNet ? `rgba(20,184,166,0.45)` : `rgba(129,140,248,0.45)`
   const trackColor = showNet ? NET_COLOR : SAVINGS_COLOR
 
   return (

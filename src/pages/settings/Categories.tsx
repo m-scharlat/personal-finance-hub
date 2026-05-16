@@ -23,7 +23,7 @@ import type { Category, TransactionType } from '../../types'
 const TYPE_LABELS: Record<TransactionType, string> = {
   expense: 'Expense Categories',
   income: 'Income Sources',
-  savings: 'Savings Labels',
+  savings: 'Savings Goals',
 }
 
 const TYPES: TransactionType[] = ['expense', 'income', 'savings']

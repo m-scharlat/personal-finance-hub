@@ -1,7 +1,8 @@
 import { NavLink } from 'react-router-dom'
 
 const LINKS = [
-  { to: '/settings/categories',      label: 'Categories' },
+  { to: '/settings/net-worth',       label: 'Accounts'        },
+  { to: '/settings/categories',      label: 'Categories'      },
   { to: '/settings/import-mappings', label: 'Import Mappings' },
 ]
 

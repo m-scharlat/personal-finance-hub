@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { formatCurrency } from '../lib/format'
+import InfoTooltip from '../components/InfoTooltip'
 import type { Category, ImportMapping, TransactionType } from '../types'
 
 // ── Parser ────────────────────────────────────────────────────────────────
@@ -354,9 +355,19 @@ export default function Import() {
             >
               Parse transactions →
             </button>
-            <span className="text-xs text-gray-400 dark:text-gray-500">
-              One entry per line — <code className="font-mono">- 25 food</code> for expenses, <code className="font-mono">+ 2400 salary</code> for income
-            </span>
+            <InfoTooltip
+              align="right"
+              direction="up"
+              text={
+                "One transaction per line:\n" +
+                "  - for expenses, + for income\n\n" +
+                "Examples:\n" +
+                "-25 coffee\n" +
+                "-120 electric bill\n" +
+                "+2400 salary\n\n" +
+                "Descriptions are matched against your import mappings to auto-assign categories. Unmatched lines are flagged for review."
+              }
+            />
           </div>
         </div>
       )}
