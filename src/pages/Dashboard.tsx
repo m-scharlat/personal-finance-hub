@@ -273,7 +273,7 @@ export default function Dashboard() {
             <MetricCard
               label="Income"
               value={formatCurrency(metrics.income)}
-              color="green"
+              color="forest"
               delta={deltas?.income.delta ?? undefined}
               deltaGood={deltas?.income.good}
               deltaLabel={deltas?.label}
@@ -289,7 +289,7 @@ export default function Dashboard() {
             <MetricCard
               label="Net Cash Flow"
               value={netFlowValue}
-              color={metrics.netFlow >= 0 ? 'green' : 'red'}
+              color={metrics.netFlow >= 0 ? 'forest' : 'red'}
               info={!selectedMonth && selectedYear === currentYear
                 ? 'Future-dated transactions are excluded.'
                 : undefined}
@@ -302,7 +302,7 @@ export default function Dashboard() {
               value={metrics.savingsRate !== null ? `${metrics.savingsRate.toFixed(1)}%` : '—'}
               subLabel={metrics.savingsRate === null ? 'No income recorded' : undefined}
               info={`Logged savings ÷ income. Only includes transactions explicitly tagged as savings.${!selectedMonth && selectedYear === currentYear ? '\n\nFuture-dated transactions are excluded.' : ''}`}
-              color="indigo"
+              color="terra"
               delta={deltas?.savingsRate.delta ?? undefined}
               deltaGood={deltas?.savingsRate.good}
               deltaLabel={deltas?.label}

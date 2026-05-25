@@ -5,39 +5,44 @@ interface Props {
   value: string
   subLabel?: string
   info?: string         // tooltip text shown on the (i) icon next to the label
-  color?: 'green' | 'red' | 'indigo' | 'gray'
+  color?: 'forest' | 'red' | 'terra' | 'amber' | 'ink'
   delta?: string        // pre-formatted change, e.g. "↑ 12.3%" or "↓ $240"
-  deltaGood?: boolean   // true = green, false = red
+  deltaGood?: boolean   // true = forest, false = red
   deltaLabel?: string   // e.g. "vs 2024" or "vs Mar '24"
 }
 
-const VALUE_COLOR = {
-  green:  'text-green-600 dark:text-green-400',
-  red:    'text-red-600 dark:text-red-400',
-  indigo: 'text-indigo-600 dark:text-indigo-400',
-  gray:   'text-gray-900 dark:text-white',
+const VALUE_COLOR: Record<NonNullable<Props['color']>, string> = {
+  forest: 'text-forest',
+  red:    'text-red',
+  terra:  'text-terra',
+  amber:  'text-amber',
+  ink:    'text-ink',
 }
 
-export default function MetricCard({ label, value, subLabel, info, color = 'gray', delta, deltaGood, deltaLabel }: Props) {
+export default function MetricCard({ label, value, subLabel, info, color = 'ink', delta, deltaGood, deltaLabel }: Props) {
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-4">
+    <div className="bg-surface border border-border rounded-[18px] shadow-card p-[18px]">
       <div className="flex items-center gap-1.5">
-        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">{label}</p>
+        <p className="text-[11px] font-medium text-ink-muted uppercase tracking-eyebrow">{label}</p>
         {info && <InfoTooltip text={info} />}
       </div>
-      <p className={`mt-2 text-2xl font-semibold tabular-nums ${VALUE_COLOR[color]}`}>{value}</p>
-      {subLabel && <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{subLabel}</p>}
+      <p className={`mt-2 text-[26px] font-semibold leading-none tracking-[-0.02em] num ${VALUE_COLOR[color]}`}>
+        {value}
+      </p>
+      {subLabel && (
+        <p className="mt-1 text-[12px] text-ink-faint">{subLabel}</p>
+      )}
       {delta && (
-        <div className="mt-2 flex items-center gap-1.5">
-          <span className={`text-xs font-medium tabular-nums ${
-            deltaGood === true  ? 'text-green-500 dark:text-green-400' :
-            deltaGood === false ? 'text-red-500 dark:text-red-400' :
-                                  'text-gray-400 dark:text-gray-500'
+        <div className="mt-1.5 flex items-center gap-1.5">
+          <span className={`text-[12px] font-medium num ${
+            deltaGood === true  ? 'text-forest' :
+            deltaGood === false ? 'text-red' :
+                                  'text-ink-faint'
           }`}>
             {delta}
           </span>
           {deltaLabel && (
-            <span className="text-xs text-gray-400 dark:text-gray-500">{deltaLabel}</span>
+            <span className="text-[12px] text-ink-faint">{deltaLabel}</span>
           )}
         </div>
       )}
