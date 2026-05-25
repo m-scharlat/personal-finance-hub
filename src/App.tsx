@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import Nav from './components/Nav'
+import Sidebar from './components/Sidebar'
 import Dashboard from './pages/Dashboard'
 import Tracker from './pages/Tracker'
 import Import from './pages/Import'
@@ -10,9 +10,9 @@ import NetWorthSettings from './pages/settings/NetWorth'
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-bg font-sans">
-      <Nav />
-      <main className="pt-16">
+    <div className="flex h-screen bg-bg font-sans overflow-hidden">
+      <Sidebar />
+      <main className="flex-1 min-w-0 overflow-auto">
         <Routes>
           <Route path="/" element={<Navigate to="/net-worth" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
