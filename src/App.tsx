@@ -10,7 +10,7 @@ import NetWorthSettings from './pages/settings/NetWorth'
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 font-sans">
+    <div className="min-h-screen bg-bg font-sans">
       <Nav />
       <main className="pt-16">
         <Routes>
