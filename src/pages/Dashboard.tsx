@@ -19,25 +19,23 @@ const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct'
 
 type ChartView = 'calendar' | 'trend'
 
-// 20 hand-picked, visually distinct colors. For > 20 categories, HSL fills the gap.
-const CATEGORY_PALETTE = [
-  '#6366f1','#ec4899','#f97316','#10b981','#06b6d4',
-  '#f43f5e','#8b5cf6','#eab308','#3b82f6','#84cc16',
-  '#14b8a6','#f59e0b','#ef4444','#a855f7','#22c55e',
-  '#0ea5e9','#d946ef','#64748b','#e879f9','#fb923c',
-]
+// 12-color categorical series — rotates through design-system palette tokens.
+// Colors must be stable per category; assigned before sort so index is insertion-order.
+const CATEGORICAL_SERIES = [
+  'terra', 'forest', 'amber', 'violet', 'blue',
+  'teal',  'rose',   'sage',  'plum',   'mustard',
+  'red',   'slate',
+] as const
+
 function categoryColor(index: number): string {
-  if (index < CATEGORY_PALETTE.length) return CATEGORY_PALETTE[index]
-  // Evenly distribute hues for any overflow categories
-  const hue = Math.round((index * 137.508) % 360) // golden-angle spacing
-  return `hsl(${hue}, 60%, 55%)`
+  return `var(--${CATEGORICAL_SERIES[index % CATEGORICAL_SERIES.length]})`
 }
 
 function MetricSkeleton() {
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-4 animate-pulse">
-      <div className="h-3 w-20 rounded bg-gray-100 dark:bg-gray-800" />
-      <div className="mt-2 h-7 w-28 rounded bg-gray-100 dark:bg-gray-800" />
+    <div className="rounded-[18px] border border-border bg-surface px-5 py-4 animate-pulse">
+      <div className="h-3 w-20 rounded bg-surface-alt" />
+      <div className="mt-2 h-7 w-28 rounded bg-surface-alt" />
     </div>
   )
 }
@@ -242,13 +240,13 @@ export default function Dashboard() {
   ]
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+    <div className="px-9 py-8">
 
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Your financial overview at a glance.</p>
+          <h1 className="text-[26px] font-semibold text-ink tracking-[-0.02em]">Dashboard</h1>
+          <p className="mt-1 text-sm text-ink-muted">Your financial overview at a glance.</p>
         </div>
         <YearMonthSelector
           year={selectedYear}
@@ -259,13 +257,13 @@ export default function Dashboard() {
       </div>
 
       {error && (
-        <div className="mt-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 px-4 py-3 text-sm text-red-700 dark:text-red-400">
+        <div className="mt-4 rounded-lg border border-border bg-red-soft px-4 py-3 text-sm text-red">
           {error}
         </div>
       )}
 
       {/* Metrics row */}
-      <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-[14px]">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => <MetricSkeleton key={i} />)
         ) : (
@@ -315,20 +313,22 @@ export default function Dashboard() {
       <div className="mt-8">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-baseline gap-2">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">{chartView === 'trend' ? 'Trends' : 'Calendar'}</h2>
-            <span className="text-xs text-gray-400 dark:text-gray-500">{selectedYear}</span>
+            <h2 className="text-[18px] font-semibold text-ink tracking-[-0.015em]">
+              {chartView === 'trend' ? 'Trends' : 'Calendar'}
+            </h2>
+            <span className="text-[13px] text-ink-faint">{selectedYear}</span>
           </div>
 
-          {/* View toggle */}
-          <div className="inline-flex items-center rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-0.5 gap-0.5">
+          {/* View toggle — segmented control */}
+          <div className="inline-flex items-center rounded-[10px] border border-border bg-surface-alt p-[3px] gap-1">
             {CHART_VIEWS.map(({ value, label }) => (
               <button
                 key={value}
                 onClick={() => setChartView(value)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                className={`px-3 py-1.5 rounded-[8px] text-xs font-medium transition-colors ${
                   chartView === value
-                    ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    ? 'bg-surface text-ink shadow-sm'
+                    : 'text-ink-muted hover:text-ink'
                 }`}
               >
                 {label}
@@ -339,16 +339,16 @@ export default function Dashboard() {
 
         {/* Calendar View */}
         {chartView === 'calendar' && (
-          <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
+          <div className="rounded-[18px] border border-border bg-surface shadow-card p-5">
             {loading ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                 {Array.from({ length: 12 }).map((_, i) => (
-                  <div key={i} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/30 p-3.5 animate-pulse">
-                    <div className="h-2.5 w-12 rounded bg-gray-100 dark:bg-gray-700 mb-3" />
+                  <div key={i} className="rounded-xl border border-border bg-surface-alt p-3.5 animate-pulse">
+                    <div className="h-2.5 w-12 rounded bg-border mb-3" />
                     <div className="space-y-2">
-                      <div className="h-2 w-full rounded bg-gray-100 dark:bg-gray-700" />
-                      <div className="h-2 w-full rounded bg-gray-100 dark:bg-gray-700" />
-                      <div className="h-2 w-full rounded bg-gray-100 dark:bg-gray-700" />
+                      <div className="h-2 w-full rounded bg-border" />
+                      <div className="h-2 w-full rounded bg-border" />
+                      <div className="h-2 w-full rounded bg-border" />
                     </div>
                   </div>
                 ))}
@@ -361,15 +361,15 @@ export default function Dashboard() {
 
         {/* Trends View */}
         {chartView === 'trend' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2 flex flex-col gap-4 min-h-[380px]">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-[14px]">
+            <div className="lg:col-span-2 flex flex-col gap-[14px] min-h-[380px]">
               {/* Income vs Expenses */}
-              <div className="flex-1 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-4 flex flex-col min-h-0">
-                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3 shrink-0">
+              <div className="flex-1 rounded-[18px] border border-border bg-surface shadow-card px-5 py-[18px] flex flex-col min-h-0">
+                <p className="text-[11px] font-medium text-ink-muted uppercase tracking-eyebrow mb-3 shrink-0">
                   Income vs Expenses
                 </p>
                 {loading ? (
-                  <div className="flex-1 rounded-lg bg-gray-50 dark:bg-gray-800/50 animate-pulse" />
+                  <div className="flex-1 rounded-lg bg-surface-alt animate-pulse" />
                 ) : (
                   <div className="flex-1 min-h-0">
                     <IncomeExpensesChart data={yearData} />
@@ -377,9 +377,9 @@ export default function Dashboard() {
                 )}
               </div>
               {/* Cumulative Savings */}
-              <div className="flex-1 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-4 flex flex-col min-h-0">
+              <div className="flex-1 rounded-[18px] border border-border bg-surface shadow-card px-5 py-[18px] flex flex-col min-h-0">
                 {loading ? (
-                  <div className="flex-1 rounded-lg bg-gray-50 dark:bg-gray-800/50 animate-pulse" />
+                  <div className="flex-1 rounded-lg bg-surface-alt animate-pulse" />
                 ) : (
                   <div className="flex-1 min-h-0">
                     <CumulativeSavingsChart data={yearData} />
@@ -387,16 +387,16 @@ export default function Dashboard() {
                 )}
               </div>
             </div>
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-[14px]">
               {/* Category Breakdown */}
-              <div className="flex-1 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-5">
+              <div className="flex-1 rounded-[18px] border border-border bg-surface shadow-card px-5 py-[18px]">
                 {loading ? (
                   <div className="space-y-3 animate-pulse">
-                    <div className="h-3 w-28 rounded bg-gray-100 dark:bg-gray-800 mb-4" />
+                    <div className="h-3 w-28 rounded bg-surface-alt mb-4" />
                     {Array.from({ length: 5 }).map((_, i) => (
                       <div key={i} className="space-y-1">
-                        <div className="h-3 w-32 rounded bg-gray-100 dark:bg-gray-800" />
-                        <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800" />
+                        <div className="h-3 w-32 rounded bg-surface-alt" />
+                        <div className="h-1 rounded-full bg-surface-alt" />
                       </div>
                     ))}
                   </div>
@@ -405,13 +405,13 @@ export default function Dashboard() {
                 )}
               </div>
               {/* Recurring vs One-off */}
-              <div className="flex-1 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-5">
+              <div className="flex-1 rounded-[18px] border border-border bg-surface shadow-card px-5 py-[18px]">
                 {loading ? (
                   <div className="space-y-3 animate-pulse">
-                    <div className="h-3 w-28 rounded bg-gray-100 dark:bg-gray-800 mb-4" />
-                    <div className="h-3 rounded-full bg-gray-100 dark:bg-gray-800" />
-                    <div className="h-4 w-full rounded bg-gray-100 dark:bg-gray-800 mt-4" />
-                    <div className="h-4 w-full rounded bg-gray-100 dark:bg-gray-800" />
+                    <div className="h-3 w-28 rounded bg-surface-alt mb-4" />
+                    <div className="h-3 rounded-full bg-surface-alt" />
+                    <div className="h-4 w-full rounded bg-surface-alt mt-4" />
+                    <div className="h-4 w-full rounded bg-surface-alt" />
                   </div>
                 ) : (
                   <RecurringVsOneOffBar
