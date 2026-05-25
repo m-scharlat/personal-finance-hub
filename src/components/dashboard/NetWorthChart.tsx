@@ -11,8 +11,8 @@ interface ChartPoint {
   date: string
   netWorth: number | null
   projected: number | null
-  growthComponent: number | null   // projected points only: portion from account growth rates
-  savingsComponent: number | null  // projected points only: portion from accumulated surplus
+  growthComponent: number | null
+  savingsComponent: number | null
   isEstimated: boolean
   isProjection: boolean
 }
@@ -23,7 +23,6 @@ const HORIZON_STEPS: Record<Exclude<Horizon, 'history'>, { totalMonths: number; 
   '10y': { totalMonths: 120, stepMonths: 6 },
 }
 
-// Target x-axis label count per horizon — sampled from actual data points so labels always land
 const HORIZON_TICKS: Record<Horizon, number> = {
   'history': 5,
   '1y':      7,
@@ -59,8 +58,6 @@ function buildChartData(
     return { date, netWorth: total, projected: null, growthComponent: null, savingsComponent: null, isEstimated: false, isProjection: false }
   })
 
-  // Compute today's anchor once — same value on both the history endpoint and the
-  // projection start, making a visual seam structurally impossible.
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const tStr = todayDateStr()
@@ -97,7 +94,6 @@ function buildChartData(
 
   if (horizon === 'history') return points
 
-  // Projection: compound growth on existing balances + linear accumulation of avg monthly surplus
   const { totalMonths, stepMonths } = HORIZON_STEPS[horizon]
   for (let i = 1; i <= totalMonths / stepMonths; i++) {
     const projDate = new Date(today)
@@ -130,7 +126,6 @@ function buildChartData(
   return points
 }
 
-// Round-number Y-axis targeting ~5 ticks
 function computeNiceAxis(values: number[]): { domain: [number, number]; ticks: number[] } {
   const min = Math.min(...values)
   const max = Math.max(...values)
@@ -150,8 +145,6 @@ function computeNiceAxis(values: number[]): { domain: [number, number]; ticks: n
   return { domain: [niceMin, niceMax], ticks }
 }
 
-// Sample evenly-spaced ticks from actual data point dates so they always render on the
-// category axis (string key matching — generated "first-of-month" dates would silently miss).
 function generateTicks(points: ChartPoint[], targetCount: number): string[] {
   if (points.length === 0) return []
   if (points.length <= targetCount) return points.map(p => p.date)
@@ -185,11 +178,11 @@ function CustomTooltip({ active, payload }: TooltipProps) {
   const showBreakdown = pt.isProjection && pt.growthComponent !== null && pt.savingsComponent !== null
 
   return (
-    <div className="rounded-lg px-3 py-2 text-xs shadow-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 min-w-[170px]">
-      <p className="text-gray-500 dark:text-gray-400 mb-0.5">{label}{suffix}</p>
-      <p className="font-semibold text-gray-900 dark:text-white">{formatCurrency(value)}</p>
+    <div className="rounded-[10px] px-3 py-2 text-xs shadow-card bg-surface border border-border min-w-[170px]">
+      <p className="text-ink-muted mb-0.5">{label}{suffix}</p>
+      <p className="font-semibold text-ink">{formatCurrency(value)}</p>
       {showBreakdown && (
-        <div className="mt-1.5 pt-1.5 border-t border-gray-100 dark:border-gray-700 space-y-0.5 text-gray-400 dark:text-gray-500">
+        <div className="mt-1.5 pt-1.5 border-t border-border space-y-0.5 text-ink-faint">
           <div className="flex justify-between gap-5">
             <span>Account growth</span>
             <span>{formatCurrency(pt.growthComponent!)}</span>
@@ -243,17 +236,17 @@ export default function NetWorthChart() {
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-6 py-5 animate-pulse">
-        <div className="h-3 w-36 rounded bg-gray-100 dark:bg-gray-800 mb-5" />
-        <div className="h-[200px] rounded bg-gray-100 dark:bg-gray-800" />
+      <div className="rounded-[18px] border border-border bg-surface px-6 py-[18px] animate-pulse">
+        <div className="h-3 w-36 rounded bg-surface-alt mb-5" />
+        <div className="h-[200px] rounded bg-surface-alt" />
       </div>
     )
   }
 
   if (points.length < 2) {
     return (
-      <div className="rounded-xl border border-dashed border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-6 py-8 text-center">
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+      <div className="rounded-[18px] border border-dashed border-border bg-surface px-6 py-8 text-center">
+        <p className="text-sm text-ink-muted">
           Log balances on at least two dates to see your wealth curve.
         </p>
       </div>
@@ -280,26 +273,24 @@ export default function NetWorthChart() {
   const hasSavings = Math.abs(monthlyNetSavings) >= 1
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-6 py-5">
+    <div className="rounded-[18px] border border-border bg-surface shadow-card px-6 py-[18px]">
       <div className="flex items-center justify-between mb-5">
-        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+        <p className="text-[11px] font-medium text-ink-muted uppercase tracking-eyebrow">
           Net Worth Over Time
         </p>
-        <div className="inline-flex items-center gap-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+        <div className="inline-flex items-center gap-1 bg-surface-alt rounded-[10px] p-[3px]">
           {(['history', '1y', '5y', '10y'] as Horizon[]).map(h => (
             <button
               key={h}
               onClick={() => setHorizon(h)}
-              className={`relative px-2.5 py-0.5 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
-                horizon === h
-                  ? 'text-white'
-                  : 'text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200'
+              className={`relative px-2.5 py-1 text-xs font-medium rounded-[8px] whitespace-nowrap transition-colors ${
+                horizon === h ? 'text-white' : 'text-ink-muted hover:text-ink'
               }`}
             >
               {horizon === h && (
                 <motion.div
                   layoutId="horizon-active"
-                  className="absolute inset-0 bg-[#d4a843] rounded-md shadow-sm"
+                  className="absolute inset-0 bg-terra rounded-[8px] shadow-sm"
                   transition={{ type: 'spring', stiffness: 500, damping: 35 }}
                 />
               )}
@@ -315,15 +306,15 @@ export default function NetWorthChart() {
         <AreaChart data={points} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="nwGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%"  stopColor="#d4a843" stopOpacity={0.18} />
-              <stop offset="95%" stopColor="#d4a843" stopOpacity={0}    />
+              <stop offset="5%"  stopColor="var(--terra)" stopOpacity={0.18} />
+              <stop offset="95%" stopColor="var(--terra)" stopOpacity={0}    />
             </linearGradient>
           </defs>
           <XAxis
             dataKey="date"
             ticks={xTicks}
             tickFormatter={formatXTick}
-            tick={{ fontSize: 11, fill: '#9ca3af' }}
+            tick={{ fontSize: 11, fill: 'var(--ink-faint)' }}
             tickLine={false}
             axisLine={false}
           />
@@ -331,61 +322,59 @@ export default function NetWorthChart() {
             domain={yDomain}
             ticks={yTicks}
             tickFormatter={formatYAxis}
-            tick={{ fontSize: 11, fill: '#9ca3af' }}
+            tick={{ fontSize: 11, fill: 'var(--ink-faint)' }}
             tickLine={false}
             axisLine={false}
             width={52}
           />
           <Tooltip
             content={<CustomTooltip />}
-            cursor={{ stroke: '#d4a843', strokeWidth: 1, strokeDasharray: '4 2' }}
+            cursor={{ stroke: 'var(--terra)', strokeWidth: 1, strokeDasharray: '4 2' }}
           />
-          {/* "Now" marker — only meaningful when projection is visible */}
           {isProjecting && (
             <ReferenceLine
               x={tStr}
-              stroke="#d1d5db"
+              stroke="var(--border-strong)"
               strokeWidth={1}
-              label={{ value: 'Now', position: 'insideTopRight', fontSize: 9, fill: '#9ca3af', dy: 2 }}
+              label={{ value: 'Now', position: 'insideTopRight', fontSize: 9, fill: 'var(--ink-faint)', dy: 2 }}
             />
           )}
           <Area
             type="monotone"
             dataKey="netWorth"
-            stroke="#d4a843"
-            strokeWidth={2}
+            stroke="var(--terra)"
+            strokeWidth={2.25}
             fill="url(#nwGradient)"
             dot={false}
-            activeDot={{ r: 4, fill: '#d4a843', strokeWidth: 0 }}
+            activeDot={{ r: 4, fill: 'var(--terra)', strokeWidth: 0 }}
             connectNulls={false}
           />
           <Area
             type="monotone"
             dataKey="projected"
-            stroke="#d4a843"
-            strokeWidth={2}
+            stroke="var(--terra)"
+            strokeWidth={2.25}
             strokeDasharray="5 3"
             strokeOpacity={0.55}
             fill="none"
             dot={false}
-            activeDot={{ r: 4, fill: '#d4a843', strokeWidth: 0 }}
+            activeDot={{ r: 4, fill: 'var(--terra)', strokeWidth: 0 }}
             connectNulls={false}
           />
         </AreaChart>
       </ResponsiveContainer>
 
-      {/* Projection assumptions — only shown when a projection horizon is active */}
       {isProjecting && (hasSavings || accountsWithGrowth > 0) && (
-        <p className="mt-3 text-[10px] text-gray-400 dark:text-gray-500 leading-relaxed">
+        <p className="mt-3 text-[10px] text-ink-faint leading-relaxed">
           Projection assumes
           {hasSavings && (
-            <> avg. <span className="font-medium text-gray-500 dark:text-gray-400">
+            <> avg. <span className="font-medium text-ink-muted">
               {monthlyNetSavings >= 0 ? '+' : ''}{formatCurrency(Math.round(monthlyNetSavings))}/mo
             </span> surplus (6-month avg.)</>
           )}
           {hasSavings && accountsWithGrowth > 0 && ' and'}
           {accountsWithGrowth > 0 && (
-            <> compound growth on <span className="font-medium text-gray-500 dark:text-gray-400">
+            <> compound growth on <span className="font-medium text-ink-muted">
               {accountsWithGrowth} account{accountsWithGrowth !== 1 ? 's' : ''}
             </span></>
           )}.
