@@ -15,11 +15,11 @@ import type { AccountType, InvestmentContribution, NetWorthAccount, NetWorthSnap
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const ACCOUNT_TYPE_META: Record<AccountType, { label: string; badgeClass: string; dot: string }> = {
-  cash:       { label: 'Cash',       dot: '#3b82f6', badgeClass: 'bg-blue-50   dark:bg-blue-950   text-blue-700   dark:text-blue-300'   },
-  savings:    { label: 'Savings',    dot: '#10b981', badgeClass: 'bg-green-50  dark:bg-green-950  text-green-700  dark:text-green-300'  },
-  investment: { label: 'Investment', dot: '#6366f1', badgeClass: 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300' },
-  retirement: { label: 'Retirement', dot: '#f59e0b', badgeClass: 'bg-amber-50  dark:bg-amber-950  text-amber-700  dark:text-amber-300'  },
-  debt:       { label: 'Debt',       dot: '#ef4444', badgeClass: 'bg-red-50    dark:bg-red-950    text-red-700    dark:text-red-300'    },
+  cash:       { label: 'Cash',       dot: 'var(--blue)',   badgeClass: 'bg-surface-alt text-blue'   },
+  savings:    { label: 'Savings',    dot: 'var(--teal)',   badgeClass: 'bg-surface-alt text-teal'   },
+  investment: { label: 'Investment', dot: 'var(--violet)', badgeClass: 'bg-surface-alt text-violet' },
+  retirement: { label: 'Retirement', dot: 'var(--amber)',  badgeClass: 'bg-amber-soft text-amber'   },
+  debt:       { label: 'Debt',       dot: 'var(--red)',    badgeClass: 'bg-red-soft text-red'       },
 }
 
 const ACCOUNT_TYPES: AccountType[]    = ['cash', 'savings', 'investment', 'retirement', 'debt']
@@ -28,12 +28,12 @@ const GROWTH_RATE_TYPES: AccountType[] = ['savings', 'investment', 'retirement']
 const LIABILITY_SUBTYPES = ['Credit Card', 'Student Loan', 'Auto Loan', 'Mortgage', 'Personal Loan', 'Line of Credit']
 
 const FIELD = [
-  'w-full text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2',
-  'bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400',
-  'focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent',
+  'w-full text-sm border border-border rounded-[10px] px-3 py-2',
+  'bg-surface text-ink placeholder:text-ink-faint',
+  'focus:outline-none focus:ring-2 focus:ring-terra focus:border-transparent',
 ].join(' ')
 
-const LABEL = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5'
+const LABEL = 'block text-sm font-medium text-ink-muted mb-1.5'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -82,10 +82,10 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 shadow-xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h2>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+      <div className="relative w-full max-w-md rounded-[18px] bg-surface shadow-card">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h2 className="text-sm font-semibold text-ink">{title}</h2>
+          <button onClick={onClose} className="p-1 text-ink-faint hover:text-ink-muted transition-colors">
             <XIcon />
           </button>
         </div>
@@ -101,13 +101,13 @@ export default function NetWorthSettings() {
   const d = new Date()
   const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
-  const [accounts, setAccounts]           = useState<AccountWithMeta[]>([])
+  const [accounts, setAccounts]             = useState<AccountWithMeta[]>([])
   const [closedAccounts, setClosedAccounts] = useState<AccountWithMeta[]>([])
-  const [loading, setLoading]             = useState(true)
-  const [pageError, setPageError]   = useState<string | null>(null)
-  const [modal, setModal]           = useState<Modal | null>(null)
-  const [saving, setSaving]         = useState(false)
-  const [modalError, setModalError] = useState<string | null>(null)
+  const [loading, setLoading]               = useState(true)
+  const [pageError, setPageError]     = useState<string | null>(null)
+  const [modal, setModal]             = useState<Modal | null>(null)
+  const [saving, setSaving]           = useState(false)
+  const [modalError, setModalError]   = useState<string | null>(null)
 
   // Account form
   const [acctName, setAcctName]             = useState('')
@@ -122,7 +122,7 @@ export default function NetWorthSettings() {
   const [snapNotes, setSnapNotes]     = useState('')
   const snapBalanceRef = useRef<HTMLInputElement>(null)
 
-  // Contribution schedule (embedded in account form)
+  // Contribution schedule
   const [schedAmt, setSchedAmt]   = useState('')
   const [schedFreq, setSchedFreq] = useState<Recurrence>('monthly')
 
@@ -237,7 +237,6 @@ export default function NetWorthSettings() {
       accountId = (data as NetWorthAccount).id
     }
 
-    // Handle contribution schedule for supported account types
     if (SCHEDULE_TYPES.includes(acctType)) {
       const existingContrib = accounts.find(r => r.account.id === accountId)?.contribution ?? null
       const amount = parseFloat(schedAmt)
@@ -308,10 +307,8 @@ export default function NetWorthSettings() {
   }
 
   async function handleReorder(reordered: AccountWithMeta[]) {
-    // Update state immediately for a responsive feel
     const ids = new Set(reordered.map(r => r.account.id))
     setAccounts([...accounts.filter(r => !ids.has(r.account.id)), ...reordered])
-    // Persist sort_order for the reordered group
     await Promise.all(reordered.map((item, index) =>
       supabase.from('net_worth_accounts').update({ sort_order: index }).eq('id', item.account.id)
     ))
@@ -325,56 +322,56 @@ export default function NetWorthSettings() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
-      <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Settings</h1>
+    <div className="px-9 py-8">
+      <h1 className="text-[26px] font-semibold text-ink tracking-[-0.02em]">Settings</h1>
       <SettingsNav />
 
       {pageError && (
-        <div className="mt-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 px-4 py-3 text-sm text-red-700 dark:text-red-400">
+        <div className="mb-4 rounded-[10px] border border-border bg-red-soft px-4 py-3 text-sm text-red">
           {pageError}
         </div>
       )}
 
       {/* Header row */}
-      <div className="mt-8 flex items-center justify-between">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Accounts</h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+          <h2 className="text-sm font-semibold text-ink">Accounts</h2>
+          <p className="text-xs text-ink-muted mt-0.5">
             Track assets and liabilities that make up your net worth.
           </p>
         </div>
         <button
           onClick={openAddAccount}
-          className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+          className="px-3 py-1.5 text-xs font-medium bg-terra text-white rounded-[10px] shadow-terra hover:opacity-90 transition-opacity"
         >
           + Add Account
         </button>
       </div>
 
       {loading ? (
-        <div className="mt-4 space-y-3 animate-pulse">
+        <div className="space-y-3 animate-pulse">
           {[1, 2, 3].map(i => (
-            <div key={i} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
-              <div className="h-4 w-32 rounded bg-gray-100 dark:bg-gray-800" />
-              <div className="mt-2 h-3 w-20 rounded bg-gray-100 dark:bg-gray-800" />
+            <div key={i} className="rounded-[18px] border border-border bg-surface p-5">
+              <div className="h-4 w-32 rounded bg-surface-alt" />
+              <div className="mt-2 h-3 w-20 rounded bg-surface-alt" />
             </div>
           ))}
         </div>
       ) : accounts.length === 0 ? (
-        <div className="mt-6 rounded-xl border border-dashed border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-6 py-10 text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">No accounts yet.</p>
-          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+        <div className="rounded-[18px] border border-dashed border-border bg-surface px-6 py-10 text-center">
+          <p className="text-sm text-ink-muted">No accounts yet.</p>
+          <p className="mt-1 text-xs text-ink-faint">
             Add checking accounts, investments, retirement funds, and debts.
           </p>
           <button
             onClick={openAddAccount}
-            className="mt-4 px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            className="mt-4 px-4 py-2 text-sm font-medium bg-terra text-white rounded-[10px] shadow-terra hover:opacity-90 transition-opacity"
           >
             Add your first account
           </button>
         </div>
       ) : (
-        <div className="mt-4 space-y-6">
+        <div className="space-y-6">
           {assets.length > 0 && (
             <AccountGroup
               title="Assets"
@@ -397,8 +394,8 @@ export default function NetWorthSettings() {
           )}
           {closedAccounts.length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Closed</p>
-              <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
+              <p className="text-xs font-semibold text-ink-faint uppercase tracking-eyebrow mb-2">Closed</p>
+              <div className="rounded-[18px] border border-border bg-surface shadow-card overflow-hidden divide-y divide-border">
                 {closedAccounts.map(({ account, latestSnapshot }) => {
                   const meta = ACCOUNT_TYPE_META[account.type]
                   return (
@@ -407,13 +404,13 @@ export default function NetWorthSettings() {
                         <span className="w-2.5 h-2.5 rounded-full shrink-0 opacity-40" style={{ backgroundColor: meta.dot }} />
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-gray-400 dark:text-gray-500 truncate">{account.name}</span>
+                            <span className="text-sm font-medium text-ink-faint truncate">{account.name}</span>
                             <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full opacity-50 ${meta.badgeClass}`}>
                               {account.type === 'debt' && account.subtype ? account.subtype : meta.label}
                             </span>
                           </div>
                           {latestSnapshot && (
-                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                            <p className="text-xs text-ink-faint mt-0.5">
                               {formatCurrency(latestSnapshot.balance)} · closed {formatDate(latestSnapshot.snapshot_date)}
                             </p>
                           )}
@@ -421,7 +418,7 @@ export default function NetWorthSettings() {
                       </div>
                       <button
                         onClick={() => reopenAccount(account.id)}
-                        className="px-2.5 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-md hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600 transition-colors shrink-0"
+                        className="px-2.5 py-1 text-xs font-medium text-ink-muted border border-border rounded-[8px] hover:text-ink hover:border-border-strong transition-colors shrink-0"
                       >
                         Reopen
                       </button>
@@ -466,10 +463,10 @@ export default function NetWorthSettings() {
                     key={t}
                     type="button"
                     onClick={() => { setAcctType(t); if (t !== 'debt') setAcctSubtype(null) }}
-                    className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-colors text-left ${
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-[10px] border text-sm transition-colors text-left ${
                       acctType === t
-                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300'
-                        : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+                        ? 'border-terra bg-terra-soft text-terra'
+                        : 'border-border text-ink-muted hover:border-border-strong'
                     }`}
                   >
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: meta.dot }} />
@@ -484,7 +481,7 @@ export default function NetWorthSettings() {
           {acctType === 'debt' && (
             <div>
               <label className={LABEL}>
-                Liability type <span className="font-normal text-gray-400">(optional)</span>
+                Liability type <span className="font-normal text-ink-faint">(optional)</span>
               </label>
               <div className="flex flex-wrap gap-2">
                 {LIABILITY_SUBTYPES.map(s => (
@@ -492,10 +489,10 @@ export default function NetWorthSettings() {
                     key={s}
                     type="button"
                     onClick={() => setAcctSubtype(acctSubtype === s ? null : s)}
-                    className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                    className={`px-3 py-1.5 rounded-[10px] border text-xs font-medium transition-colors ${
                       acctSubtype === s
-                        ? 'border-red-400 bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300'
-                        : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
+                        ? 'border-red bg-red-soft text-red'
+                        : 'border-border text-ink-muted hover:border-border-strong'
                     }`}
                   >
                     {s}
@@ -509,10 +506,10 @@ export default function NetWorthSettings() {
           {SCHEDULE_TYPES.includes(acctType) && (
             <div>
               <label className={LABEL}>
-                Recurring contribution <span className="font-normal text-gray-400">(optional)</span>
+                Recurring contribution <span className="font-normal text-ink-faint">(optional)</span>
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-faint">$</span>
                 <input
                   type="number"
                   min="0.01"
@@ -529,10 +526,10 @@ export default function NetWorthSettings() {
                     key={f}
                     type="button"
                     onClick={() => setSchedFreq(f)}
-                    className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                    className={`flex-1 py-1.5 rounded-[10px] border text-xs font-medium transition-colors ${
                       schedFreq === f
-                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300'
-                        : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
+                        ? 'border-terra bg-terra-soft text-terra'
+                        : 'border-border text-ink-muted hover:border-border-strong'
                     }`}
                   >
                     {f === 'weekly' ? 'Weekly' : f === 'monthly' ? 'Monthly' : 'Annual'}
@@ -546,7 +543,7 @@ export default function NetWorthSettings() {
           {GROWTH_RATE_TYPES.includes(acctType) && (
             <div>
               <label className={LABEL}>
-                Annual rate <span className="font-normal text-gray-400">(optional)</span>
+                Annual rate <span className="font-normal text-ink-faint">(optional)</span>
               </label>
               <div className="relative">
                 <input
@@ -559,23 +556,23 @@ export default function NetWorthSettings() {
                   onChange={e => setAcctGrowthRate(e.target.value)}
                   className={FIELD + ' pr-8'}
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-ink-faint">%</span>
               </div>
-              <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
+              <p className="mt-1.5 text-xs text-ink-faint">
                 The expected yearly return or interest rate for this account.
               </p>
             </div>
           )}
 
-          {modalError && <p className="text-xs text-red-600 dark:text-red-400">{modalError}</p>}
+          {modalError && <p className="text-xs text-red">{modalError}</p>}
           <div className="flex justify-end gap-2 pt-1">
-            <button onClick={closeModal} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+            <button onClick={closeModal} className="px-4 py-2 text-sm text-ink-muted hover:text-ink transition-colors">
               Cancel
             </button>
             <button
               onClick={saveAccount}
               disabled={saving || !acctName.trim()}
-              className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="px-4 py-2 text-sm font-medium bg-terra text-white rounded-[10px] shadow-terra hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
             >
               {saving ? 'Saving…' : modal.target ? 'Save Changes' : 'Add Account'}
             </button>
@@ -588,7 +585,7 @@ export default function NetWorthSettings() {
           <div>
             <label className={LABEL}>Balance</label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-faint">$</span>
               <input
                 ref={snapBalanceRef}
                 type="number"
@@ -601,7 +598,7 @@ export default function NetWorthSettings() {
               />
             </div>
             {modal.account.type === 'debt' && (
-              <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
+              <p className="mt-1.5 text-xs text-ink-faint">
                 Enter the outstanding balance (positive number).
               </p>
             )}
@@ -616,7 +613,7 @@ export default function NetWorthSettings() {
             />
           </div>
           <div>
-            <label className={LABEL}>Notes <span className="font-normal text-gray-400">(optional)</span></label>
+            <label className={LABEL}>Notes <span className="font-normal text-ink-faint">(optional)</span></label>
             <input
               type="text"
               placeholder="e.g. After year-end statement"
@@ -625,15 +622,15 @@ export default function NetWorthSettings() {
               className={FIELD}
             />
           </div>
-          {modalError && <p className="text-xs text-red-600 dark:text-red-400">{modalError}</p>}
+          {modalError && <p className="text-xs text-red">{modalError}</p>}
           <div className="flex justify-end gap-2 pt-1">
-            <button onClick={closeModal} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+            <button onClick={closeModal} className="px-4 py-2 text-sm text-ink-muted hover:text-ink transition-colors">
               Cancel
             </button>
             <button
               onClick={saveSnapshot}
               disabled={saving || !snapBalance}
-              className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="px-4 py-2 text-sm font-medium bg-terra text-white rounded-[10px] shadow-terra hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
             >
               {saving ? 'Saving…' : 'Log Balance'}
             </button>
@@ -643,31 +640,31 @@ export default function NetWorthSettings() {
 
       {modal?.kind === 'delete' && (
         <ModalShell title="Remove Account?" onClose={closeModal}>
-          <p className="text-sm text-gray-600 dark:text-gray-300">
-            How would you like to remove <strong>{modal.account.name}</strong>?
+          <p className="text-sm text-ink-muted">
+            How would you like to remove <strong className="text-ink">{modal.account.name}</strong>?
           </p>
           <div className="space-y-2">
             <button
               onClick={() => closeAccount(modal.account.id)}
-              className="w-full text-left px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
+              className="w-full text-left px-4 py-3 rounded-[10px] border border-border hover:border-border-strong transition-colors"
             >
-              <p className="text-sm font-medium text-gray-900 dark:text-white">Close account</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              <p className="text-sm font-medium text-ink">Close account</p>
+              <p className="text-xs text-ink-muted mt-0.5">
                 Hides from your active net worth. Balance history is preserved.
               </p>
             </button>
             <button
               onClick={() => deleteAccount(modal.account.id)}
-              className="w-full text-left px-4 py-3 rounded-lg border border-red-100 dark:border-red-900/30 hover:border-red-200 dark:hover:border-red-800 transition-colors"
+              className="w-full text-left px-4 py-3 rounded-[10px] border border-border bg-red-soft hover:border-border-strong transition-colors"
             >
-              <p className="text-sm font-medium text-red-600 dark:text-red-400">Delete account</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              <p className="text-sm font-medium text-red">Delete account</p>
+              <p className="text-xs text-ink-muted mt-0.5">
                 Removes entirely. Use for accounts added by mistake.
               </p>
             </button>
           </div>
           <div className="flex justify-end pt-1">
-            <button onClick={closeModal} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+            <button onClick={closeModal} className="px-4 py-2 text-sm text-ink-muted hover:text-ink transition-colors">
               Cancel
             </button>
           </div>
@@ -716,7 +713,7 @@ function SortableAccountRow({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
-      className="px-5 py-4 bg-white dark:bg-gray-900"
+      className="px-5 py-4 bg-surface"
     >
       <div className="flex items-center justify-between gap-3">
         {/* Drag handle + left content */}
@@ -725,14 +722,14 @@ function SortableAccountRow({
             {...attributes}
             {...listeners}
             tabIndex={-1}
-            className="p-1 text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none shrink-0"
+            className="p-1 text-ink-faint hover:text-ink-muted cursor-grab active:cursor-grabbing touch-none shrink-0 transition-colors"
           >
             <GripIcon />
           </button>
           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: meta.dot }} />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{account.name}</span>
+              <span className="text-sm font-medium text-ink truncate">{account.name}</span>
               <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${meta.badgeClass}`}>
                 {account.type === 'debt' && account.subtype ? account.subtype : meta.label}
               </span>
@@ -740,29 +737,29 @@ function SortableAccountRow({
             {latestSnapshot ? (
               isPaidOff ? (
                 <>
-                  <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">
+                  <p className="text-xs text-forest mt-0.5">
                     Paid off ✓
-                    <span className="ml-1 text-gray-400 dark:text-gray-500">
+                    <span className="ml-1 text-ink-faint">
                       · {formatDate(latestSnapshot.snapshot_date)}
                     </span>
                   </p>
                   <button
                     onClick={() => onDelete(account)}
-                    className="text-xs text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors mt-0.5"
+                    className="text-xs text-ink-faint hover:text-terra transition-colors mt-0.5"
                   >
                     Close account →
                   </button>
                 </>
               ) : (
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                <p className="text-xs text-ink-muted mt-0.5">
                   {formatCurrency(latestSnapshot.balance)}
-                  <span className="ml-1 text-gray-400 dark:text-gray-500">
+                  <span className="ml-1 text-ink-faint">
                     as of {formatDate(latestSnapshot.snapshot_date)}
                   </span>
                 </p>
               )
             ) : (
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">No balance logged yet</p>
+              <p className="text-xs text-ink-faint mt-0.5">No balance logged yet</p>
             )}
           </div>
         </div>
@@ -771,20 +768,20 @@ function SortableAccountRow({
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => onLogBalance(account, latestSnapshot)}
-            className="px-2.5 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors"
+            className="px-2.5 py-1 text-xs font-medium text-terra border border-border rounded-[8px] hover:bg-terra-soft transition-colors"
           >
             Log Balance
           </button>
           <button
             onClick={() => onEdit(account)}
-            className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+            className="p-1.5 text-ink-faint hover:text-ink transition-colors"
             title="Edit"
           >
             <PencilIcon />
           </button>
           <button
             onClick={() => onDelete(account)}
-            className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+            className="p-1.5 text-ink-faint hover:text-red transition-colors"
             title="Delete"
           >
             <TrashIcon />
@@ -811,8 +808,8 @@ function AccountGroup({ title, items, onEdit, onLogBalance, onDelete, onReorder 
 
   return (
     <div>
-      <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">{title}</p>
-      <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
+      <p className="text-xs font-semibold text-ink-faint uppercase tracking-eyebrow mb-2">{title}</p>
+      <div className="rounded-[18px] border border-border bg-surface shadow-card overflow-hidden divide-y divide-border">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={items.map(r => r.account.id)} strategy={verticalListSortingStrategy}>
             {items.map(item => (

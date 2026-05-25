@@ -102,7 +102,7 @@ function SortableRow({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={`flex items-center gap-3 px-5 py-3 min-h-[44px] ${
-        isDragging ? 'opacity-50 bg-gray-50 dark:bg-gray-800/60' : ''
+        isDragging ? 'opacity-50 bg-surface-alt' : ''
       }`}
     >
       <button
@@ -111,7 +111,7 @@ function SortableRow({
         aria-label="Drag to reorder"
         className={`flex-shrink-0 transition-colors ${
           draggable
-            ? 'cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400'
+            ? 'cursor-grab active:cursor-grabbing text-ink-faint hover:text-ink-muted'
             : 'cursor-default text-transparent'
         }`}
       >
@@ -130,59 +130,59 @@ function SortableRow({
                 if (e.key === 'Enter') onSaveRename()
                 if (e.key === 'Escape') onCancelEdit()
               }}
-              className="flex-1 text-sm border border-gray-200 dark:border-gray-700 rounded-md px-3 py-1 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="flex-1 text-sm border border-border rounded-[8px] px-3 py-1 bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-terra focus:border-transparent"
             />
             <button
               onClick={onSaveRename}
               disabled={!editValue.trim()}
-              className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="text-xs font-medium text-terra hover:opacity-70 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
             >
               Save
             </button>
             <button
               onClick={onCancelEdit}
-              className="text-xs font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              className="text-xs font-medium text-ink-faint hover:text-ink-muted transition-colors"
             >
               Cancel
             </button>
           </div>
           {editError && (
-            <p className="text-xs text-red-600 dark:text-red-400">{editError}</p>
+            <p className="text-xs text-red">{editError}</p>
           )}
         </div>
       ) : isDeleting ? (
         <>
-          <span className="flex-1 text-sm text-gray-500 dark:text-gray-400">
+          <span className="flex-1 text-sm text-ink-muted">
             Delete{' '}
-            <span className="font-medium text-gray-900 dark:text-white">{cat.name}</span>?
+            <span className="font-medium text-ink">{cat.name}</span>?
           </span>
           <button
             onClick={onConfirmDelete}
-            className="text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+            className="text-xs font-medium text-red hover:opacity-70 transition-opacity"
           >
             Delete
           </button>
           <button
             onClick={onCancelDelete}
-            className="text-xs font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            className="text-xs font-medium text-ink-faint hover:text-ink-muted transition-colors"
           >
             Cancel
           </button>
         </>
       ) : (
         <>
-          <span className="flex-1 text-sm text-gray-900 dark:text-white">{cat.name}</span>
+          <span className="flex-1 text-sm text-ink">{cat.name}</span>
           <button
             onClick={onStartEdit}
             aria-label="Rename"
-            className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+            className="p-1 text-ink-faint hover:text-ink transition-colors"
           >
             <PencilIcon />
           </button>
           <button
             onClick={onStartDelete}
             aria-label="Delete"
-            className="p-1 text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+            className="p-1 text-ink-faint hover:text-red transition-colors"
           >
             <TrashIcon />
           </button>
@@ -316,13 +316,11 @@ export default function Categories() {
     const newIndex = group.findIndex((c) => c.id === over.id)
     const reordered = arrayMove(group, oldIndex, newIndex)
 
-    // Optimistic update
     setCategories((prev) => [
       ...prev.filter((c) => c.type !== type),
       ...reordered,
     ])
 
-    // Persist — update only sort_order, one row at a time to avoid unique constraint conflicts
     await Promise.all(
       reordered.map((cat, idx) =>
         supabase.from('categories').update({ sort_order: idx + 1 }).eq('id', cat.id),
@@ -336,36 +334,36 @@ export default function Categories() {
   )
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
-      <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Settings</h1>
+    <div className="px-9 py-8">
+      <h1 className="text-[26px] font-semibold text-ink tracking-[-0.02em]">Settings</h1>
       <SettingsNav />
 
       {fetchError && (
-        <div className="mt-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 px-4 py-3 text-sm text-red-700 dark:text-red-400">
+        <div className="mb-4 rounded-[10px] border border-border bg-red-soft px-4 py-3 text-sm text-red">
           {fetchError}
         </div>
       )}
 
-      <div className="mt-8 space-y-4">
+      <div className="space-y-4">
         {TYPES.map((type) => (
           <div
             key={type}
-            className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden"
+            className="rounded-[18px] border border-border bg-surface shadow-card overflow-hidden"
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h2 className="text-sm font-semibold text-ink">
                 {TYPE_LABELS[type]}
               </h2>
               <button
                 onClick={() => (addingType === type ? cancelAdd() : startAdd(type))}
-                className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+                className="text-xs font-medium text-terra hover:opacity-70 transition-opacity"
               >
                 {addingType === type ? 'Cancel' : '+ Add'}
               </button>
             </div>
 
             {addingType === type && (
-              <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40">
+              <div className="px-5 py-3 border-b border-border bg-surface-alt">
                 <div className="flex items-center gap-2">
                   <input
                     ref={addInputRef}
@@ -377,28 +375,28 @@ export default function Categories() {
                       if (e.key === 'Enter') handleAdd()
                       if (e.key === 'Escape') cancelAdd()
                     }}
-                    className="flex-1 text-sm border border-gray-200 dark:border-gray-700 rounded-md px-3 py-1.5 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className="flex-1 text-sm border border-border rounded-[8px] px-3 py-1.5 bg-surface text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-terra focus:border-transparent"
                   />
                   <button
                     onClick={handleAdd}
                     disabled={!addValue.trim()}
-                    className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="px-3 py-1.5 text-xs font-medium bg-terra text-white rounded-[10px] shadow-terra hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
                   >
                     Add
                   </button>
                 </div>
                 {addError && (
-                  <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">{addError}</p>
+                  <p className="mt-1.5 text-xs text-red">{addError}</p>
                 )}
               </div>
             )}
 
             {loading ? (
-              <div className="px-5 py-8 text-center text-sm text-gray-400 dark:text-gray-600">
+              <div className="px-5 py-8 text-center text-sm text-ink-faint">
                 Loading…
               </div>
             ) : grouped[type].length === 0 ? (
-              <div className="px-5 py-6 text-center text-sm text-gray-400 dark:text-gray-600">
+              <div className="px-5 py-6 text-center text-sm text-ink-faint">
                 No categories yet.
               </div>
             ) : (
@@ -411,7 +409,7 @@ export default function Categories() {
                   items={grouped[type].map((c) => c.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                  <ul className="divide-y divide-border">
                     {grouped[type].map((cat) => (
                       <SortableRow
                         key={cat.id}
