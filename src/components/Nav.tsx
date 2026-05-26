@@ -13,7 +13,7 @@ export default function Nav() {
     <header className="fixed top-0 inset-x-0 z-50 h-16 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
       <div className="max-w-6xl mx-auto h-full px-4 sm:px-6 flex items-center justify-between">
         <span className="text-sm font-semibold text-gray-900 dark:text-white tracking-tight">
-          Finance Hub
+          Cairn
         </span>
         <nav className="flex items-center gap-1">
           {links.map(({ to, label }) => (

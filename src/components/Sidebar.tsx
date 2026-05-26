@@ -2,6 +2,21 @@ import { NavLink } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
+// Three-stone Cairn mark — 64×64 viewBox, scaled via width/height
+// variant="color": terra/forest/amber; variant="mono": all white (for terra tile)
+function CairnMark({ size = 20, variant = 'color' }: { size?: number; variant?: 'color' | 'mono' }) {
+  const bottom = variant === 'mono' ? 'white' : 'var(--terra)'
+  const middle = variant === 'mono' ? 'white' : 'var(--forest)'
+  const top    = variant === 'mono' ? 'white' : 'var(--amber)'
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <rect x="12" y="36" width="40" height="14" rx="7" fill={bottom} />
+      <rect x="18" y="20" width="28" height="14" rx="7" fill={middle} />
+      <rect x="24" y="4"  width="16" height="14" rx="7" fill={top} />
+    </svg>
+  )
+}
+
 // Stroke icons — 16×16 viewBox, currentColor stroke
 const Icon = ({ children }: { children: React.ReactNode }) => (
   <svg
@@ -59,16 +74,18 @@ export default function Sidebar() {
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-3 pb-[22px]">
         <div
-          className="w-[30px] h-[30px] rounded-[10px] bg-terra flex items-center justify-center text-white font-semibold text-sm shrink-0"
-          style={{ boxShadow: '0 2px 6px rgba(198,107,70,0.25)' }}
+          className="w-8 h-8 rounded-[10px] bg-terra flex items-center justify-center shrink-0"
+          style={{ boxShadow: '0 2px 8px rgba(198,107,70,0.30)' }}
         >
-          F
+          <CairnMark size={18} variant="mono" />
         </div>
         <div className="min-w-0">
-          <div className="font-semibold text-[14.5px] text-ink tracking-tight whitespace-nowrap">
-            Finance Hub
+          <div className="font-semibold text-[15px] text-ink tracking-tight whitespace-nowrap">
+            Cairn
           </div>
-          <div className="text-[11.5px] text-ink-faint -mt-0.5 whitespace-nowrap">Personal</div>
+          <div className="text-[10.5px] font-medium text-ink-faint uppercase tracking-[0.08em] -mt-0.5 whitespace-nowrap">
+            Personal Finance
+          </div>
         </div>
       </div>
 
