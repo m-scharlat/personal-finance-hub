@@ -1,0 +1,100 @@
+/* Finance Hub — design tokens
+ * Drop into src/index.css. Theme swap: toggle .dark on <html>.
+ * Tailwind config (tailwind.extend.js) references these vars.
+ */
+
+:root {
+  /* Surfaces */
+  --bg:           #f1ebe1;
+  --bg-alt:       #ebe4d6;
+  --surface:      #ffffff;
+  --surface-alt:  #fbf8f2;
+  --border:       rgba(60, 40, 20, 0.07);
+  --border-strong: rgba(60, 40, 20, 0.12);
+
+  /* Ink */
+  --ink:          #2a201a;
+  --ink-muted:    #7a6a5c;
+  --ink-faint:    #a89789;
+
+  /* Semantic palette (used across the system) */
+  --terra:  #c66b46;
+  --forest: #3d6b54;
+  --red:    #b8492f;
+  --amber:  #c98a3a;
+  --violet: #7a6bd6;
+  --blue:   #5a7fb8;
+  --teal:   #3d8a8a;
+
+  /* Extended categorical palette */
+  /* Use these (plus the 7 semantic above) to color category breakdowns.
+     12 hues total, all sharing similar chroma + lightness so they read
+     as a coherent system. Rotate through them in order. */
+  --mustard: #b89535;
+  --sage:    #6b8a52;
+  --plum:    #9a5fa8;
+  --rose:    #c45a82;
+  --slate:   #6b7a85;
+
+  /* Soft alpha variants */
+  --terra-soft:        rgba(198, 107, 70, 0.10);
+  --terra-soft-strong: rgba(198, 107, 70, 0.22);
+  --forest-soft:       rgba(61, 107, 84, 0.10);
+  --red-soft:          rgba(184, 73, 47, 0.10);
+  --amber-soft:        rgba(201, 138, 58, 0.12);
+
+  /* Elevation */
+  --shadow-card:  0 1px 2px rgba(60, 40, 20, 0.04), 0 4px 14px rgba(60, 40, 20, 0.04);
+  --shadow-terra: 0 1px 2px rgba(0, 0, 0, 0.05), 0 4px 14px var(--terra-soft-strong);
+
+  /* Geometry */
+  --radius:    12px;
+  --radius-lg: 18px;
+}
+
+.dark {
+  --bg:           #15151a;
+  --bg-alt:       #101015;
+  --surface:      #1e1e24;
+  --surface-alt:  #26262d;
+  --border:       rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.10);
+
+  --ink:          #f0ece3;
+  --ink-muted:    #9c948a;
+  --ink-faint:    #6b645c;
+
+  --terra:  #e89072;
+  --forest: #7ec99c;
+  --red:    #e0826b;
+  --amber:  #e8b878;
+  --violet: #a89be8;
+  --blue:   #8aa8d6;
+  --teal:   #7ec5c5;
+
+  --mustard: #d4b568;
+  --sage:    #a8c590;
+  --plum:    #c590d0;
+  --rose:    #e890b0;
+  --slate:   #a0adb8;
+
+  --terra-soft:        rgba(232, 144, 114, 0.15);
+  --terra-soft-strong: rgba(232, 144, 114, 0.22);
+  --forest-soft:       rgba(126, 201, 156, 0.14);
+  --red-soft:          rgba(224, 130, 107, 0.14);
+  --amber-soft:        rgba(232, 184, 120, 0.14);
+
+  --shadow-card:  0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+
+/* Body defaults */
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tabular figures helper — apply to every monetary value */
+.num { font-variant-numeric: tabular-nums; }

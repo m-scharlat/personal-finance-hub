@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Finance Hub — Redesign</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; height: 100%; background: #f0eee9; }
+  body { font-family: 'Geist', system-ui, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  #root { width: 100%; height: 100vh; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="src/data.js"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="src/cozy/shell.jsx"></script>
+<script type="text/babel" src="src/cozy/net-worth.jsx"></script>
+<script type="text/babel" src="src/cozy/dashboard-calendar.jsx"></script>
+<script type="text/babel" src="src/cozy/dashboard.jsx"></script>
+<script type="text/babel" src="src/cozy/transactions.jsx"></script>
+<script type="text/babel" src="src/cozy/import.jsx"></script>
+<script type="text/babel" src="src/cozy/settings.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+
+function App() {
+  const { DesignCanvas, DCSection, DCArtboard } = window;
+
+  const ABW = 1380;
+  const ABH = 920;
+
+  const render = (Screen, theme, extra = {}) => (
+    <div style={{ width: ABW, height: ABH, overflow: 'hidden', background: theme.bg }}>
+      <Screen theme={theme} {...extra} />
+    </div>
+  );
+
+  const screens = (theme, prefix) => [
+    { id: prefix + '-nw',  label: 'Net Worth',         Screen: window.CozyNetWorth },
+    { id: prefix + '-db',  label: 'Dashboard · Trends', Screen: window.CozyDashboard,    extra: { view: 'trends' } },
+    { id: prefix + '-cal', label: 'Dashboard · Calendar', Screen: window.CozyDashboard,  extra: { view: 'calendar' } },
+    { id: prefix + '-tx',  label: 'Transactions',      Screen: window.CozyTransactions },
+    { id: prefix + '-im',  label: 'Import',            Screen: window.CozyImport },
+    { id: prefix + '-acc', label: 'Settings · Accounts',     Screen: window.CozySettings, extra: { tab: 'accounts' } },
+    { id: prefix + '-cat', label: 'Settings · Categories',   Screen: window.CozySettings, extra: { tab: 'categories' } },
+    { id: prefix + '-map', label: 'Settings · Mappings',     Screen: window.CozySettings, extra: { tab: 'mappings' } },
+  ];
+
+  const renderSection = (id, title, subtitle, theme) => (
+    <DCSection id={id} title={title} subtitle={subtitle}>
+      {screens(theme, id).map(s => (
+        <DCArtboard key={s.id} id={s.id} label={s.label} width={ABW} height={ABH}>
+          {render(s.Screen, theme, s.extra || {})}
+        </DCArtboard>
+      ))}
+    </DCSection>
+  );
+
+  return (
+    <DesignCanvas>
+      {renderSection(
+        'cozy',
+        'Cozy · Light',
+        'Warm cream background, crisp white cards, terracotta + forest accents.',
+        window.cozyTheme
+      )}
+      {renderSection(
+        'twilight',
+        'Twilight · Dark',
+        'Same palette, dark companion. Peach + mint on a warm-charcoal canvas.',
+        window.twilightTheme
+      )}
+      <DCSection
+        id="system"
+        title="Color system"
+        subtitle="Every chart, badge, and dot pulls from these tokens — change once, propagates everywhere."
+      >
+        <DCArtboard id="palette" label="Palette" width={ABW} height={760}>
+          <PaletteCard />
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+function PaletteCard() {
+  const t = window.cozyTheme;
+  const tw = window.twilightTheme;
+  const tokens = [
+    { key: 'terra',   use: 'Primary brand · accents · CTAs · charts',     group: 'Semantic' },
+    { key: 'forest',  use: 'Income · positive deltas · savings progress', group: 'Semantic' },
+    { key: 'red',     use: 'Expenses · liabilities · negative deltas',    group: 'Semantic' },
+    { key: 'amber',   use: 'Retirement accounts · neutral data series',   group: 'Semantic' },
+    { key: 'violet',  use: 'Investment accounts · trigger chips',         group: 'Semantic' },
+    { key: 'blue',    use: 'Cash accounts',                               group: 'Semantic' },
+    { key: 'teal',    use: 'Savings accounts (HYSA)',                     group: 'Semantic' },
+    { key: 'mustard', use: 'Category data series',                        group: 'Extended' },
+    { key: 'sage',    use: 'Category data series',                        group: 'Extended' },
+    { key: 'plum',    use: 'Category data series',                        group: 'Extended' },
+    { key: 'rose',    use: 'Category data series',                        group: 'Extended' },
+    { key: 'slate',   use: 'Category data series · "Other" / uncategorized', group: 'Extended' },
+  ];
+
+  return (
+    <div style={{
+      width: '100%', height: '100%',
+      background: t.bg,
+      padding: '36px 48px',
+      fontFamily: t.font, color: t.ink,
+      boxSizing: 'border-box',
+    }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr 1fr 1fr', gap: 18, marginBottom: 14 }}>
+        {['Token', 'Use', 'Light', 'Dark'].map(h => (
+          <div key={h} style={{ fontSize: 11, color: t.inkMuted, textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 500, alignSelf: 'end' }}>{h}</div>
+        ))}
+      </div>
+      <div style={{ background: t.surface, borderRadius: t.radiusLg, border: `1px solid ${t.border}`, boxShadow: t.cardShadow, overflow: 'hidden' }}>
+        {tokens.map((tok, i) => {
+          const prevGroup = i > 0 ? tokens[i - 1].group : null;
+          const groupChanged = tok.group !== prevGroup;
+          return (
+            <React.Fragment key={tok.key}>
+              {groupChanged && (
+                <div style={{
+                  padding: '12px 22px',
+                  fontSize: 10.5, color: t.inkFaint, fontWeight: 500,
+                  textTransform: 'uppercase', letterSpacing: '0.1em',
+                  background: t.surfaceAlt,
+                  borderTop: i > 0 ? `1px solid ${t.border}` : 'none',
+                  borderBottom: `1px solid ${t.border}`,
+                }}>{tok.group} · {tok.group === 'Semantic' ? 'fixed meaning' : 'rotate through for category breakdowns'}</div>
+              )}
+              <div style={{
+                display: 'grid', gridTemplateColumns: '180px 1fr 1fr 1fr', gap: 18,
+                padding: '12px 22px', alignItems: 'center',
+                borderBottom: i < tokens.length - 1 && tokens[i + 1].group === tok.group ? `1px solid ${t.border}` : 'none',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ width: 14, height: 14, borderRadius: 4, background: t[tok.key] }} />
+                  <span style={{ fontWeight: 500, fontSize: 14 }}>{tok.key}</span>
+                </div>
+                <div style={{ fontSize: 13, color: t.inkMuted }}>{tok.use}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 22, height: 22, borderRadius: 6, background: t[tok.key] }} />
+                  <code style={{ fontFamily: t.mono, fontSize: 12, color: t.inkMuted }}>{t[tok.key]}</code>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 22, height: 22, borderRadius: 6, background: tw[tok.key] }} />
+                  <code style={{ fontFamily: t.mono, fontSize: 12, color: t.inkMuted }}>{tw[tok.key]}</code>
+                </div>
+              </div>
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

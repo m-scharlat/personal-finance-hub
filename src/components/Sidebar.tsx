@@ -74,10 +74,13 @@ export default function Sidebar() {
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-3 pb-[22px]">
         <div
-          className="w-8 h-8 rounded-[10px] bg-terra flex items-center justify-center shrink-0"
-          style={{ boxShadow: '0 2px 8px rgba(198,107,70,0.30)' }}
+          className="w-8 h-8 rounded-[10px] flex items-center justify-center shrink-0"
+          style={dark
+            ? { background: 'var(--terra)', boxShadow: '0 2px 8px rgba(198,107,70,0.30)' }
+            : { background: '#ffffff', border: '1px solid var(--border)', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }
+          }
         >
-          <CairnMark size={18} variant="mono" />
+          <CairnMark size={18} variant={dark ? 'mono' : 'color'} />
         </div>
         <div className="min-w-0">
           <div className="font-semibold text-[15px] text-ink tracking-tight whitespace-nowrap">
