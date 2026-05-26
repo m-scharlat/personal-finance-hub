@@ -84,7 +84,7 @@ export default function Sidebar() {
             Cairn
           </div>
           <div className="text-[10.5px] font-medium text-ink-faint uppercase tracking-[0.08em] -mt-0.5 whitespace-nowrap">
-            Personal Finance
+            Personal Finance Hub
           </div>
         </div>
       </div>

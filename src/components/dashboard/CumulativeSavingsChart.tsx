@@ -8,10 +8,14 @@ import { formatCurrency, niceYAxis, formatYTick } from '../../lib/format'
 import InfoTooltip from '../InfoTooltip'
 import type { MonthlyTrendPoint } from '../../types'
 
-const SAVINGS_COLOR   = '#818cf8'
-const NET_COLOR       = '#14b8a6'
-const AXIS_COLOR      = '#9ca3af'
-const GRID_COLOR      = 'rgba(148,163,184,0.10)'
+const SAVINGS_COLOR = 'var(--terra)'
+const NET_COLOR     = 'var(--teal)'
+const AXIS_COLOR    = 'var(--ink-faint)'
+const GRID_COLOR    = 'var(--border)'
+
+// Hardcoded rgba for box-shadow glow (CSS vars can't be used in box-shadow rgba())
+const SAVINGS_GLOW  = 'rgba(198,123,70,0.38)'
+const NET_GLOW      = 'rgba(13,148,136,0.38)'
 
 const now        = new Date()
 const THIS_YEAR  = now.getFullYear()
@@ -31,7 +35,6 @@ function CustomTooltip({ active, payload, label, showNet }: {
 }) {
   if (!active || !payload?.length) return null
 
-  // Read both values from the raw data point regardless of which Area is rendered
   const point      = payload[0].payload
   const savings    = point.cumulative
   const netSavings = point.netSavings
@@ -41,35 +44,33 @@ function CustomTooltip({ active, payload, label, showNet }: {
     const unlogged = savings != null && netSavings > savings ? netSavings - savings : null
     const hasBreakdown = savings != null || unlogged != null
     return (
-      <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg px-3 py-2.5 text-xs">
-        <p className="font-medium text-gray-600 dark:text-gray-300 mb-2">{label}</p>
-        {/* Total */}
+      <div className="rounded-[10px] border border-border bg-surface shadow-card px-3 py-2.5 text-xs">
+        <p className="font-medium text-ink-muted mb-2">{label}</p>
         <div className="flex items-center justify-between gap-6">
           <div className="flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: NET_COLOR }} />
-            <span className="text-gray-500 dark:text-gray-400">Net savings</span>
+            <span className="text-ink-muted">Net savings</span>
           </div>
-          <span className="font-semibold tabular-nums" style={{ color: NET_COLOR }}>{formatCurrency(netSavings)}</span>
+          <span className="font-semibold num" style={{ color: NET_COLOR }}>{formatCurrency(netSavings)}</span>
         </div>
-        {/* Breakdown — indented to show these are components of net, not subtractions */}
         {hasBreakdown && (
-          <div className="mt-1.5 ml-1.5 pl-2.5 border-l-2 border-gray-100 dark:border-gray-700 space-y-1">
+          <div className="mt-1.5 ml-1.5 pl-2.5 border-l-2 border-border space-y-1">
             {savings != null && (
               <div className="flex items-center justify-between gap-6">
                 <div className="flex items-center gap-1.5">
                   <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: SAVINGS_COLOR }} />
-                  <span className="text-gray-500 dark:text-gray-400">Logged</span>
+                  <span className="text-ink-muted">Logged</span>
                 </div>
-                <span className="font-semibold tabular-nums" style={{ color: SAVINGS_COLOR }}>{formatCurrency(savings)}</span>
+                <span className="font-semibold num" style={{ color: SAVINGS_COLOR }}>{formatCurrency(savings)}</span>
               </div>
             )}
             {unlogged != null && (
               <div className="flex items-center justify-between gap-6">
                 <div className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-gray-300 dark:bg-gray-600" />
-                  <span className="text-gray-400 dark:text-gray-500">Unlogged</span>
+                  <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-border-strong" />
+                  <span className="text-ink-faint">Unlogged</span>
                 </div>
-                <span className="tabular-nums text-gray-400 dark:text-gray-500">{formatCurrency(unlogged)}</span>
+                <span className="num text-ink-faint">{formatCurrency(unlogged)}</span>
               </div>
             )}
           </div>
@@ -80,14 +81,14 @@ function CustomTooltip({ active, payload, label, showNet }: {
 
   if (savings == null) return null
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg px-3 py-2.5 text-xs">
-      <p className="font-medium text-gray-600 dark:text-gray-300 mb-2">{label}</p>
+    <div className="rounded-[10px] border border-border bg-surface shadow-card px-3 py-2.5 text-xs">
+      <p className="font-medium text-ink-muted mb-2">{label}</p>
       <div className="flex items-center justify-between gap-6">
         <div className="flex items-center gap-1.5">
           <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: SAVINGS_COLOR }} />
-          <span className="text-gray-500 dark:text-gray-400">Logged savings</span>
+          <span className="text-ink-muted">Logged savings</span>
         </div>
-        <span className="font-semibold tabular-nums" style={{ color: SAVINGS_COLOR }}>{formatCurrency(savings)}</span>
+        <span className="font-semibold num" style={{ color: SAVINGS_COLOR }}>{formatCurrency(savings)}</span>
       </div>
     </div>
   )
@@ -98,7 +99,7 @@ function XTick(props: { x?: number | string; y?: number | string; payload?: { va
   return (
     <text x={Number(x)} y={Number(y)} dy={14} textAnchor="middle" fontSize={11}
       fontWeight={isCurrent ? 700 : 400}
-      fill={isCurrent ? '#c4b09a' : AXIS_COLOR}
+      fill={isCurrent ? 'var(--terra)' : AXIS_COLOR}
     >
       {payload?.value}
     </text>
@@ -122,11 +123,10 @@ export default function CumulativeSavingsChart({ data }: Props) {
     return { label: d.label, cumulative: runningSavings, netSavings: runningNet }
   })
 
-  // Y-axis scales to the active series only; snapped to clean intervals
   const yMax = Math.max(...chartData.map(d => (showNet ? d.netSavings : d.cumulative) ?? 0), 1)
   const { ticks: yTicks, domain: yDomain } = niceYAxis(yMax)
 
-  const glowColor  = showNet ? `rgba(20,184,166,0.45)` : `rgba(129,140,248,0.45)`
+  const glowColor  = showNet ? NET_GLOW : SAVINGS_GLOW
   const trackColor = showNet ? NET_COLOR : SAVINGS_COLOR
 
   return (
@@ -134,7 +134,7 @@ export default function CumulativeSavingsChart({ data }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between mb-3 shrink-0">
         <div className="flex items-center gap-1.5">
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+          <p className="text-[11px] font-medium text-ink-muted uppercase tracking-eyebrow">
             {showNet ? 'Cumulative Net Savings' : 'Cumulative Savings'}
           </p>
           <InfoTooltip text={showNet
@@ -143,7 +143,7 @@ export default function CumulativeSavingsChart({ data }: Props) {
           } />
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400 dark:text-gray-500">
+          <span className="text-xs text-ink-faint">
             {showNet ? 'Net savings' : 'Logged only'}
           </span>
           <button
@@ -190,10 +190,9 @@ export default function CumulativeSavingsChart({ data }: Props) {
               tick={{ fill: AXIS_COLOR, fontSize: 11 }}
               axisLine={false} tickLine={false} width={40}
             />
-            <Tooltip content={<CustomTooltip showNet={showNet} />} cursor={{ stroke: 'rgba(148,163,184,0.25)', strokeWidth: 1 }} />
-            <ReferenceLine y={0} stroke="rgba(148,163,184,0.25)" strokeWidth={1} />
+            <Tooltip content={<CustomTooltip showNet={showNet} />} cursor={{ stroke: 'var(--border-strong)', strokeWidth: 1 }} />
+            <ReferenceLine y={0} stroke="var(--border-strong)" strokeWidth={1} />
 
-            {/* One Area rendered at a time — key change forces remount and replays animation on toggle */}
             {showNet ? (
               <Area
                 key="net"
@@ -224,7 +223,7 @@ export default function CumulativeSavingsChart({ data }: Props) {
       </div>
 
       {/* Legend */}
-      <div className="mt-2 flex items-center gap-5 text-xs text-gray-500 dark:text-gray-400">
+      <div className="mt-2 flex items-center gap-5 text-xs text-ink-muted">
         {showNet ? (
           <div className="flex items-center gap-1.5">
             <div className="w-5 h-[2px] rounded-full shrink-0" style={{ backgroundColor: NET_COLOR }} />

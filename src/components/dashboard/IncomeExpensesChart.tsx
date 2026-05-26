@@ -6,10 +6,10 @@ import {
 import { formatCurrency, niceYAxis, formatYTick } from '../../lib/format'
 import type { MonthlyTrendPoint } from '../../types'
 
-const INCOME_COLOR  = '#4ade80'
-const EXPENSE_COLOR = '#f87171'
-const AXIS_COLOR    = '#9ca3af'
-const GRID_COLOR    = 'rgba(148,163,184,0.10)'
+const INCOME_COLOR  = 'var(--forest)'
+const EXPENSE_COLOR = 'var(--red)'
+const AXIS_COLOR    = 'var(--ink-faint)'
+const GRID_COLOR    = 'var(--border)'
 
 const now        = new Date()
 const THIS_YEAR  = now.getFullYear()
@@ -34,8 +34,8 @@ function CustomTooltip({ active, payload, label }: {
   if (d.isFuture) return null
   const net = d.income - d.expenses
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg px-3 py-2.5 text-xs">
-      <p className="font-medium text-gray-600 dark:text-gray-300 mb-2">{label}</p>
+    <div className="rounded-[10px] border border-border bg-surface shadow-card px-3 py-2.5 text-xs">
+      <p className="font-medium text-ink-muted mb-2">{label}</p>
       {[
         { label: 'Income',   value: d.income,   color: INCOME_COLOR  },
         { label: 'Expenses', value: d.expenses, color: EXPENSE_COLOR },
@@ -43,14 +43,14 @@ function CustomTooltip({ active, payload, label }: {
         <div key={e.label} className="flex items-center justify-between gap-6 mb-1">
           <div className="flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: e.color }} />
-            <span className="text-gray-500 dark:text-gray-400">{e.label}</span>
+            <span className="text-ink-muted">{e.label}</span>
           </div>
-          <span className="font-semibold tabular-nums" style={{ color: e.color }}>{formatCurrency(e.value)}</span>
+          <span className="font-semibold num" style={{ color: e.color }}>{formatCurrency(e.value)}</span>
         </div>
       ))}
-      <div className="mt-1.5 pt-1.5 border-t border-gray-100 dark:border-gray-800 flex justify-between">
-        <span className="text-gray-400 dark:text-gray-500">Net</span>
-        <span className={`font-semibold tabular-nums ${net >= 0 ? 'text-green-500' : 'text-red-400'}`}>
+      <div className="mt-1.5 pt-1.5 border-t border-border flex justify-between">
+        <span className="text-ink-faint">Net</span>
+        <span className={`font-semibold num ${net >= 0 ? 'text-forest' : 'text-red'}`}>
           {net >= 0 ? '+' : ''}{formatCurrency(net)}
         </span>
       </div>
@@ -63,7 +63,7 @@ function XTick(props: { x?: number | string; y?: number | string; payload?: { va
   return (
     <text x={Number(x)} y={Number(y)} dy={14} textAnchor="middle" fontSize={11}
       fontWeight={isCurrent ? 700 : 400}
-      fill={isCurrent ? '#c4b09a' : AXIS_COLOR}
+      fill={isCurrent ? 'var(--terra)' : AXIS_COLOR}
     >
       {payload?.value}
     </text>
@@ -87,7 +87,6 @@ export default function IncomeExpensesChart({ data }: Props) {
 
   const currentLabel = chartData.find(d => d.isCurrent)?.label
 
-  // Y-axis scales only to real data, not zeroed-out future months
   const yMax = Math.max(...chartData.filter(d => !d.isFuture).map(d => Math.max(d.income, d.expenses)), 1)
   const { ticks: yTicks, domain: yDomain } = niceYAxis(yMax)
 
@@ -106,9 +105,9 @@ export default function IncomeExpensesChart({ data }: Props) {
           tick={{ fill: AXIS_COLOR, fontSize: 11 }}
           axisLine={false} tickLine={false} width={40}
         />
-        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(148,163,184,0.07)' }} />
+        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--terra-soft)' }} />
         {currentLabel && (
-          <ReferenceArea x1={currentLabel} x2={currentLabel} fill="rgba(196,176,154,0.10)" strokeOpacity={0} />
+          <ReferenceArea x1={currentLabel} x2={currentLabel} fill="var(--terra-soft)" strokeOpacity={0} />
         )}
         <Bar dataKey="income" name="Income" radius={[3, 3, 0, 0]}>
           {chartData.map((_, i) => (

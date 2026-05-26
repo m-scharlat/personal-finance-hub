@@ -1,8 +1,5 @@
 import { useState } from 'react'
 import { formatCurrency } from '../../lib/format'
-import InfoTooltip from '../InfoTooltip'
-
-const NEUTRAL = 'var(--ink-faint)'
 
 export interface CategoryAvg {
   category: string
@@ -16,39 +13,28 @@ interface Props {
 }
 
 export default function CategoryBreakdown({ data, limit }: Props) {
-  const [showAll, setShowAll]               = useState(false)
-  const [sectionHovered, setSectionHovered] = useState(false)
-  const [pinned, setPinned]                 = useState(false)
-  const showColor = pinned || sectionHovered
+  const [showAll, setShowAll] = useState(false)
   const truncated = limit && data.length > limit && !showAll
   const visible   = truncated ? data.slice(0, limit) : data
   const max       = Math.max(...visible.map(d => d.avgPerMonth), 1)
 
   return (
     <div>
-      <div className="flex items-center gap-1.5 mb-3">
-        <p className="text-[11px] font-medium text-ink-muted uppercase tracking-eyebrow">
-          Spending by Category
-        </p>
-        <InfoTooltip text="Hover to reveal colors · Click to lock them in" />
-      </div>
+      <p className="text-[11px] font-medium text-ink-muted uppercase tracking-eyebrow mb-3">
+        Spending by Category
+      </p>
       {data.length === 0 ? (
         <p className="text-sm text-ink-faint">No expense data in this period.</p>
       ) : (
         <>
-          <div
-            className="space-y-3 cursor-pointer"
-            onMouseEnter={() => setSectionHovered(true)}
-            onMouseLeave={() => setSectionHovered(false)}
-            onClick={() => setPinned(p => !p)}
-          >
+          <div className="space-y-3">
             {visible.map(({ category, avgPerMonth, color }) => (
               <div key={category}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2 min-w-0">
                     <div
-                      className="w-[7px] h-[7px] rounded-full shrink-0 transition-colors duration-300"
-                      style={{ backgroundColor: showColor ? color : NEUTRAL }}
+                      className="w-[7px] h-[7px] rounded-full shrink-0"
+                      style={{ backgroundColor: color }}
                     />
                     <span className="text-[13.5px] text-ink truncate">{category}</span>
                   </div>
@@ -61,7 +47,7 @@ export default function CategoryBreakdown({ data, limit }: Props) {
                     className="h-full rounded-full transition-all duration-300"
                     style={{
                       width: `${(avgPerMonth / max) * 100}%`,
-                      backgroundColor: showColor ? color : NEUTRAL,
+                      backgroundColor: color,
                       opacity: 0.75,
                     }}
                   />

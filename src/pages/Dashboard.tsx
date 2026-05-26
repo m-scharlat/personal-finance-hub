@@ -21,10 +21,20 @@ type ChartView = 'calendar' | 'trend'
 
 // 12-color categorical series — rotates through design-system palette tokens.
 // Colors must be stable per category; assigned before sort so index is insertion-order.
+// Ordered to keep perceptually similar hues apart — warm/cool alternating.
 const CATEGORICAL_SERIES = [
-  'terra', 'forest', 'amber', 'violet', 'blue',
-  'teal',  'rose',   'sage',  'plum',   'mustard',
-  'red',   'slate',
+  'terra',   // warm orange
+  'violet',  // cool purple
+  'forest',  // cool green
+  'red',     // warm red
+  'blue',    // cool blue
+  'amber',   // warm yellow-orange
+  'plum',    // cool deep purple
+  'sage',    // cool muted green
+  'rose',    // warm pink
+  'teal',    // cool blue-green
+  'mustard', // warm yellow
+  'slate',   // cool blue-gray
 ] as const
 
 function categoryColor(index: number): string {
