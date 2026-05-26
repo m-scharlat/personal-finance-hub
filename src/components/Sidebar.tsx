@@ -32,7 +32,7 @@ const NetWorthIcon     = () => <Icon><path d="M3 13h10M5 13V8M8 13V4M11 13V9" />
 const DashboardIcon    = () => <Icon><rect x="2.5" y="2.5" width="5" height="5" rx="1"/><rect x="8.5" y="2.5" width="5" height="5" rx="1"/><rect x="2.5" y="8.5" width="5" height="5" rx="1"/><rect x="8.5" y="8.5" width="5" height="5" rx="1"/></Icon>
 const TransactionsIcon = () => <Icon><path d="M3 5h7l-2-2M13 11H6l2 2" /></Icon>
 const ImportIcon       = () => <Icon><path d="M8 2v8M5 7l3 3 3-3M3 13h10" /></Icon>
-const SettingsIcon     = () => <Icon><circle cx="8" cy="8" r="2" /><path d="M8 1v2M8 13v2M15 8h-2M3 8H1M13 3l-1.4 1.4M4.4 11.6L3 13M13 13l-1.4-1.4M4.4 4.4L3 3" /></Icon>
+const SettingsIcon     = () => <Icon><line x1="2" y1="4" x2="14" y2="4" /><circle cx="10" cy="4" r="1.5" /><line x1="2" y1="8" x2="14" y2="8" /><circle cx="5" cy="8" r="1.5" /><line x1="2" y1="12" x2="14" y2="12" /><circle cx="10" cy="12" r="1.5" /></Icon>
 
 type NavItemDef = {
   to: string
