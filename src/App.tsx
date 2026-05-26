@@ -61,7 +61,7 @@ export default function App() {
           className="group/expand fixed left-0 inset-y-0 w-8 z-50 flex items-center justify-center cursor-pointer"
         >
           {/* Fading container strip */}
-          <div className="absolute inset-0 opacity-0 group-hover/expand:opacity-100 transition-opacity duration-200 bg-bg border-r border-border" />
+          <div className="absolute inset-0 opacity-0 group-hover/expand:opacity-100 transition-opacity duration-200 bg-bg" />
           {/* Bottom-to-top text */}
           <span
             className="relative opacity-0 group-hover/expand:opacity-100 transition-opacity duration-200 text-[11px] font-semibold tracking-[0.25em] text-ink-muted uppercase select-none whitespace-nowrap"
