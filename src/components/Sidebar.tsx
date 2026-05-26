@@ -70,7 +70,7 @@ export default function Sidebar() {
   const initials = userEmail ? userEmail.slice(0, 2).toUpperCase() : '—'
 
   return (
-    <aside className="w-[232px] shrink-0 flex flex-col gap-0.5 px-3 py-[22px] bg-bg">
+    <aside className="w-[260px] shrink-0 flex flex-col gap-0.5 px-3 py-[22px] bg-bg border-r border-border">
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-3 pb-[22px]">
         <div
@@ -102,14 +102,8 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="mt-auto pt-4 px-1.5 flex flex-col gap-3">
-        {/* Theme toggle */}
-        <div className="flex items-center p-[3px] rounded-full bg-surface-alt">
-          <ToggleHalf active={!dark} label="Light" icon="☀" onClick={() => toggleTheme('light')} />
-          <ToggleHalf active={dark}  label="Dark"  icon="☾" onClick={() => toggleTheme('dark')} />
-        </div>
-
         {/* User chip */}
-        <div className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-surface border border-border shadow-card">
+        <div className="flex items-center gap-2 px-2.5 py-2 rounded-xl bg-surface border border-border shadow-card">
           <div
             className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-white text-[11px] font-semibold"
             style={{ background: 'linear-gradient(135deg, var(--terra), var(--forest))' }}
@@ -121,6 +115,16 @@ export default function Sidebar() {
               {userEmail ?? '—'}
             </div>
           </div>
+          <button
+            onClick={() => toggleTheme(dark ? 'light' : 'dark')}
+            className="shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-ink-muted hover:text-ink hover:bg-surface-alt transition-colors"
+            aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {dark
+              ? <svg width={13} height={13} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="3.5"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06"/></svg>
+              : <svg width={13} height={13} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z"/></svg>
+            }
+          </button>
         </div>
       </div>
     </aside>
@@ -160,23 +164,5 @@ function SidebarItem({ item }: { item: NavItemDef }) {
         </>
       )}
     </NavLink>
-  )
-}
-
-function ToggleHalf({
-  active, label, icon, onClick,
-}: {
-  active: boolean; label: string; icon: string; onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex-1 flex items-center justify-center gap-1 py-[5px] px-2 rounded-full text-[11.5px] font-medium transition-colors ${
-        active ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted'
-      }`}
-    >
-      <span className="text-[12px]">{icon}</span>
-      {label}
-    </button>
   )
 }
