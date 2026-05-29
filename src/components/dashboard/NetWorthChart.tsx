@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../lib/format'
-import type { NetWorthAccount, NetWorthSnapshot } from '../../types'
+import type { NetWorthAccount, NetWorthSnapshot, NetWorthMilestone } from '../../types'
 
 type Horizon = 'history' | '1y' | '5y' | '10y'
 
@@ -164,6 +164,80 @@ function formatYAxis(value: number): string {
   return `${sign}$${abs}`
 }
 
+// Computes when the projection will cross a milestone target, scanning up to 30 years.
+// Independent of chart horizon so chips always show a real ETA.
+function computeCrossingDate(
+  accounts: NetWorthAccount[],
+  snapshots: NetWorthSnapshot[],
+  monthlyNetSavings: number,
+  target: number,
+  today: Date,
+): { reached: boolean; crossingDate: Date | null } {
+  const snapsByAccount = new Map<string, NetWorthSnapshot[]>()
+  for (const a of accounts) snapsByAccount.set(a.id, [])
+  for (const s of snapshots) snapsByAccount.get(s.account_id)?.push(s)
+
+  let anchorTotal = 0
+  const anchorBalances: { balance: number; account: NetWorthAccount }[] = []
+  for (const account of accounts) {
+    const acctSnaps = snapsByAccount.get(account.id) ?? []
+    const lastSnap = acctSnaps[acctSnaps.length - 1]
+    if (!lastSnap) continue
+    let balance = lastSnap.balance
+    if (account.growth_rate && account.growth_rate > 0) {
+      const days = Math.floor((today.getTime() - new Date(lastSnap.snapshot_date + 'T00:00:00').getTime()) / 86_400_000)
+      if (days > 0) balance = balance * Math.pow(1 + account.growth_rate, days / 365)
+    }
+    anchorBalances.push({ balance, account })
+    anchorTotal += account.type === 'debt' ? -balance : balance
+  }
+
+  if (anchorTotal >= target) return { reached: true, crossingDate: null }
+
+  for (let month = 1; month <= 360; month++) {
+    const projDate = new Date(today)
+    projDate.setMonth(projDate.getMonth() + month)
+    const daysAhead = (projDate.getTime() - today.getTime()) / 86_400_000
+
+    let growthTotal = 0
+    for (const { balance, account } of anchorBalances) {
+      let b = balance
+      if (account.growth_rate && account.growth_rate > 0 && account.type !== 'debt') {
+        b = balance * Math.pow(1 + account.growth_rate, daysAhead / 365)
+      }
+      growthTotal += account.type === 'debt' ? -b : b
+    }
+
+    if (growthTotal + month * monthlyNetSavings >= target) {
+      return { reached: false, crossingDate: projDate }
+    }
+  }
+
+  return { reached: false, crossingDate: null }
+}
+
+function formatETA(crossingDate: Date, today: Date): string {
+  const months = (crossingDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30.44)
+  if (months < 1.5) return '< 1 month'
+  if (months < 12)  return `~${Math.round(months)} months`
+  const years = months / 12
+  return years < 2 ? `~${years.toFixed(1)} years` : `~${Math.round(years)} years`
+}
+
+function MilestoneLabel({ viewBox, name, eta }: {
+  viewBox?: { x: number; y: number; width: number; height: number }
+  name: string
+  eta: string
+}) {
+  if (!viewBox) return null
+  return (
+    <g>
+      <text x={viewBox.x + 4} y={viewBox.y + 11} fontSize={9} fontWeight={600} fill="var(--violet)" fontFamily="inherit">{name}</text>
+      <text x={viewBox.x + 4} y={viewBox.y + 22} fontSize={9} fill="var(--violet)" opacity={0.7} fontFamily="inherit">{eta}</text>
+    </g>
+  )
+}
+
 interface TooltipProps { active?: boolean; payload?: Array<{ payload: ChartPoint }> }
 
 function CustomTooltip({ active, payload }: TooltipProps) {
@@ -200,6 +274,7 @@ function CustomTooltip({ active, payload }: TooltipProps) {
 export default function NetWorthChart() {
   const [accounts,          setAccounts]          = useState<NetWorthAccount[]>([])
   const [snapshots,         setSnapshots]         = useState<NetWorthSnapshot[]>([])
+  const [milestones,        setMilestones]        = useState<NetWorthMilestone[]>([])
   const [monthlyNetSavings, setMonthlyNetSavings] = useState(0)
   const [horizon,           setHorizon]           = useState<Horizon>('1y')
   const [loading,           setLoading]           = useState(true)
@@ -216,10 +291,11 @@ export default function NetWorthChart() {
     cutoff.setMonth(cutoff.getMonth() - 6)
     const cutoffStr = cutoff.toISOString().split('T')[0]
 
-    const [acctRes, snapRes, txRes] = await Promise.all([
+    const [acctRes, snapRes, txRes, milestoneRes] = await Promise.all([
       supabase.from('net_worth_accounts').select('*').eq('active', true),
       supabase.from('net_worth_snapshots').select('*').order('snapshot_date'),
       supabase.from('transactions').select('type, amount').gte('date', cutoffStr),
+      supabase.from('net_worth_milestones').select('*').order('target_amount'),
     ])
 
     let income = 0, expenses = 0
@@ -230,6 +306,7 @@ export default function NetWorthChart() {
 
     setAccounts((acctRes.data ?? []) as NetWorthAccount[])
     setSnapshots((snapRes.data ?? []) as NetWorthSnapshot[])
+    setMilestones((milestoneRes.data ?? []) as NetWorthMilestone[])
     setMonthlyNetSavings((income - expenses) / 6)
     setLoading(false)
   }
@@ -261,13 +338,34 @@ export default function NetWorthChart() {
     : 0
   const formatXTick = (dateStr: string) => {
     const d = new Date(dateStr + 'T00:00:00')
-    return (horizon === 'history' && spanDays <= 730) || horizon === '1y'
-      ? d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-      : d.toLocaleDateString('en-US', { year: 'numeric' })
+    if (horizon === 'history' && spanDays <= 90)
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    if ((horizon === 'history' && spanDays <= 730) || horizon === '1y')
+      return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+    return d.toLocaleDateString('en-US', { year: 'numeric' })
   }
 
   const allValues = points.flatMap(p => [p.netWorth, p.projected]).filter((v): v is number => v !== null)
   const { domain: yDomain, ticks: yTicks } = computeNiceAxis(allValues)
+
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const milestoneCrossings = milestones.map(m => {
+    const { reached, crossingDate } = computeCrossingDate(accounts, snapshots, monthlyNetSavings, m.target_amount, today)
+    if (!crossingDate) return { milestone: m, reached, crossingDate: null, crossingStr: null, inChartRange: false }
+    const crossingTime = crossingDate.getTime()
+    // Snap to the nearest projected chart point so the x value matches a real data key
+    let nearest: ChartPoint | null = null
+    let minDiff = Infinity
+    for (const pt of points) {
+      if (!pt.isProjection) continue
+      const diff = Math.abs(new Date(pt.date + 'T00:00:00').getTime() - crossingTime)
+      if (diff < minDiff) { minDiff = diff; nearest = pt }
+    }
+    const crossingStr = nearest?.date ?? null
+    const inChartRange = crossingStr !== null
+      && crossingDate.toISOString().split('T')[0] <= (points[points.length - 1]?.date ?? '')
+    return { milestone: m, reached, crossingDate, crossingStr, inChartRange }
+  })
 
   const accountsWithGrowth = accounts.filter(a => a.growth_rate && a.growth_rate > 0 && a.type !== 'debt').length
   const hasSavings = Math.abs(monthlyNetSavings) >= 1
@@ -302,7 +400,7 @@ export default function NetWorthChart() {
         </div>
       </div>
 
-      <ResponsiveContainer width="100%" height={220}>
+<ResponsiveContainer width="100%" height={220}>
         <AreaChart data={points} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="nwGradient" x1="0" y1="0" x2="0" y2="1">
@@ -331,6 +429,17 @@ export default function NetWorthChart() {
             content={<CustomTooltip />}
             cursor={{ stroke: 'var(--terra)', strokeWidth: 1, strokeDasharray: '4 2' }}
           />
+          {milestoneCrossings.filter(c => c.inChartRange && c.crossingStr).map(({ milestone, crossingStr, crossingDate }) => (
+            <ReferenceLine
+              key={milestone.id}
+              x={crossingStr!}
+              stroke="var(--violet)"
+              strokeWidth={1}
+              strokeDasharray="4 3"
+              strokeOpacity={0.7}
+              label={<MilestoneLabel name={milestone.label} eta={formatETA(crossingDate!, today)} />}
+            />
+          ))}
           {isProjecting && (
             <ReferenceLine
               x={tStr}

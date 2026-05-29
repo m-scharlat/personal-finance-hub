@@ -9,6 +9,8 @@ import CalendarView from '../components/dashboard/CalendarView'
 import RecurringVsOneOffBar from '../components/dashboard/RecurringVsOneOffBar'
 import CategoryBreakdown from '../components/dashboard/CategoryBreakdown'
 import type { CategoryAvg } from '../components/dashboard/CategoryBreakdown'
+import BudgetGuidanceBar from '../components/dashboard/BudgetGuidanceBar'
+import type { CategorySpend } from '../components/dashboard/BudgetGuidanceBar'
 import type { Transaction, MonthlyTrendPoint } from '../types'
 
 const now          = new Date()
@@ -240,6 +242,60 @@ export default function Dashboard() {
       .sort((a, b) => b.avgPerMonth - a.avgPerMonth)
   }, [transactions, selectedYear])
 
+  // ── Budget guidance (month view only) ────────────────────────────────────
+
+  const budgetGuidanceData = useMemo<CategorySpend[]>(() => {
+    if (!selectedMonth) return []
+
+    // 3 trailing months, handling year boundary
+    const trailingMonths: { year: number; month: number }[] = []
+    let ty = selectedYear, tm = selectedMonth
+    for (let i = 0; i < 3; i++) {
+      tm -= 1
+      if (tm === 0) { tm = 12; ty -= 1 }
+      trailingMonths.push({ year: ty, month: tm })
+    }
+
+    // Current month totals by category
+    const currentTotals: Record<string, number> = {}
+    for (const t of transactions) {
+      if (t.type === 'expense' && t.month === selectedMonth) {
+        currentTotals[t.category] = (currentTotals[t.category] ?? 0) + t.amount
+      }
+    }
+
+    // Trailing totals — draws from both years' data
+    const allTx = [...transactions, ...compTransactions]
+    const trailingByCategory: Record<string, number[]> = {}
+    for (const { year, month } of trailingMonths) {
+      const monthTotals: Record<string, number> = {}
+      for (const t of allTx) {
+        if (t.type === 'expense' && t.year === year && t.month === month) {
+          monthTotals[t.category] = (monthTotals[t.category] ?? 0) + t.amount
+        }
+      }
+      for (const [cat, amt] of Object.entries(monthTotals)) {
+        if (!trailingByCategory[cat]) trailingByCategory[cat] = []
+        trailingByCategory[cat].push(amt)
+      }
+    }
+
+    const colorMap = Object.fromEntries(categoryAverages.map(c => [c.category, c.color]))
+
+    return Object.entries(currentTotals)
+      .map(([category, currentMonth], i) => {
+        const sums = trailingByCategory[category] ?? []
+        const trailing3mo = sums.length > 0 ? sums.reduce((a, b) => a + b, 0) / sums.length : 0
+        return {
+          category,
+          color: colorMap[category] ?? categoryColor(i),
+          currentMonth,
+          trailing3mo,
+        }
+      })
+      .sort((a, b) => b.currentMonth - a.currentMonth)
+  }, [transactions, compTransactions, selectedMonth, selectedYear, categoryAverages])
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   const netFlowValue = `${metrics.netFlow >= 0 ? '+' : '−'}${formatCurrency(Math.abs(metrics.netFlow))}`
@@ -410,6 +466,11 @@ export default function Dashboard() {
                       </div>
                     ))}
                   </div>
+                ) : selectedMonth ? (
+                  <BudgetGuidanceBar
+                    data={budgetGuidanceData}
+                    monthLabel={MONTH_SHORT[selectedMonth - 1]}
+                  />
                 ) : (
                   <CategoryBreakdown data={categoryAverages} limit={5} />
                 )}

@@ -17,23 +17,23 @@ export default function RecurringVsOneOffBar({ committed, avgMonthlyIncome, comm
 
   return (
     <div>
-      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">
+      <p className="text-[11px] font-medium text-ink-muted uppercase tracking-eyebrow mb-4">
         Recurring Expenses
       </p>
 
       {committed === 0 ? (
-        <p className="text-sm text-gray-400 dark:text-gray-600">No recurring expenses on record.</p>
+        <p className="text-sm text-ink-faint">No recurring expenses on record.</p>
       ) : (
         <>
           {/* Headline */}
           <div className="mb-1">
-            <span className="text-2xl font-bold tabular-nums text-gray-900 dark:text-white">
+            <span className="text-2xl font-bold tabular-nums text-ink">
               {formatCurrency(committed)}
             </span>
-            <span className="ml-1.5 text-sm text-gray-400 dark:text-gray-500">/mo committed</span>
+            <span className="ml-1.5 text-sm text-ink-muted">/mo committed</span>
           </div>
           {burdenPct !== null && (
-            <p className="text-xs text-gray-400 dark:text-gray-500">
+            <p className="text-xs text-ink-faint">
               {burdenPct.toFixed(0)}% of avg monthly income
             </p>
           )}
@@ -45,13 +45,13 @@ export default function RecurringVsOneOffBar({ committed, avgMonthlyIncome, comm
                 <div key={category} className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <div
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: categoryColorMap[category] ?? '#9ca3af' }}
+                      className="w-[7px] h-[7px] rounded-full shrink-0"
+                      style={{ backgroundColor: categoryColorMap[category] ?? 'var(--ink-faint)' }}
                     />
-                    <span className="text-xs text-gray-600 dark:text-gray-400 truncate">{category}</span>
+                    <span className="text-[13px] text-ink truncate">{category}</span>
                   </div>
-                  <span className="text-xs font-semibold tabular-nums text-gray-900 dark:text-white ml-3 shrink-0">
-                    {formatCurrency(monthlyRate)}<span className="font-normal text-gray-400 dark:text-gray-500">/mo</span>
+                  <span className="text-[13px] font-medium num text-ink ml-3 shrink-0">
+                    {formatCurrency(monthlyRate)}<span className="font-normal text-ink-muted">/mo</span>
                   </span>
                 </div>
               ))}

@@ -5,7 +5,7 @@ interface Props {
   value: string
   subLabel?: string
   info?: string         // tooltip text shown on the (i) icon next to the label
-  color?: 'forest' | 'red' | 'terra' | 'amber' | 'ink'
+  color?: 'forest' | 'red' | 'terra' | 'amber' | 'teal' | 'ink'
   delta?: string        // pre-formatted change, e.g. "↑ 12.3%" or "↓ $240"
   deltaGood?: boolean   // true = forest, false = red
   deltaLabel?: string   // e.g. "vs 2024" or "vs Mar '24"
@@ -16,6 +16,7 @@ const VALUE_COLOR: Record<NonNullable<Props['color']>, string> = {
   red:    'text-red',
   terra:  'text-terra',
   amber:  'text-amber',
+  teal:   'text-teal',
   ink:    'text-ink',
 }
 

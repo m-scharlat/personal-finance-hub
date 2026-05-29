@@ -41,6 +41,7 @@ export default {
         'forest-soft':       'var(--forest-soft)',
         'red-soft':          'var(--red-soft)',
         'amber-soft':        'var(--amber-soft)',
+        'teal-soft':         'var(--teal-soft)',
       },
       boxShadow: {
         card:  'var(--shadow-card)',

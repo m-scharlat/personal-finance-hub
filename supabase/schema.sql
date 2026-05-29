@@ -172,3 +172,16 @@ CREATE POLICY "anon_all_net_worth_snapshots"
 
 CREATE POLICY "anon_all_investment_contributions"
   ON investment_contributions FOR ALL USING (true) WITH CHECK (true);
+
+-- net_worth_milestones table
+CREATE TABLE IF NOT EXISTS net_worth_milestones (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  target_amount NUMERIC(14, 2) NOT NULL CHECK (target_amount > 0),
+  label         TEXT NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE net_worth_milestones ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "anon_all_net_worth_milestones"
+  ON net_worth_milestones FOR ALL USING (true) WITH CHECK (true);

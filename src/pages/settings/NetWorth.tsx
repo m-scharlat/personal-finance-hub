@@ -10,7 +10,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency, formatDate } from '../../lib/format'
 import SettingsNav from '../../components/SettingsNav'
-import type { AccountType, InvestmentContribution, NetWorthAccount, NetWorthSnapshot, Recurrence } from '../../types'
+import type { AccountType, InvestmentContribution, NetWorthAccount, NetWorthMilestone, NetWorthSnapshot, Recurrence } from '../../types'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -47,6 +47,8 @@ type Modal =
   | { kind: 'account'; target: NetWorthAccount | null }
   | { kind: 'snapshot'; account: NetWorthAccount }
   | { kind: 'delete'; account: NetWorthAccount }
+  | { kind: 'milestone'; target: NetWorthMilestone | null }
+  | { kind: 'deleteMilestone'; target: NetWorthMilestone }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -103,6 +105,7 @@ export default function NetWorthSettings() {
 
   const [accounts, setAccounts]             = useState<AccountWithMeta[]>([])
   const [closedAccounts, setClosedAccounts] = useState<AccountWithMeta[]>([])
+  const [milestones, setMilestones]         = useState<NetWorthMilestone[]>([])
   const [loading, setLoading]               = useState(true)
   const [pageError, setPageError]     = useState<string | null>(null)
   const [modal, setModal]             = useState<Modal | null>(null)
@@ -122,6 +125,11 @@ export default function NetWorthSettings() {
   const [snapNotes, setSnapNotes]     = useState('')
   const snapBalanceRef = useRef<HTMLInputElement>(null)
 
+  // Milestone form
+  const [milestoneLabel,  setMilestoneLabel]  = useState('')
+  const [milestoneAmount, setMilestoneAmount] = useState('')
+  const milestoneLabelRef = useRef<HTMLInputElement>(null)
+
   // Contribution schedule
   const [schedAmt, setSchedAmt]   = useState('')
   const [schedFreq, setSchedFreq] = useState<Recurrence>('monthly')
@@ -132,18 +140,20 @@ export default function NetWorthSettings() {
 
   useEffect(() => {
     if (!modal) return
-    if (modal.kind === 'account')  setTimeout(() => acctNameRef.current?.focus(), 50)
-    if (modal.kind === 'snapshot') setTimeout(() => snapBalanceRef.current?.focus(), 50)
+    if (modal.kind === 'account')   setTimeout(() => acctNameRef.current?.focus(), 50)
+    if (modal.kind === 'snapshot')  setTimeout(() => snapBalanceRef.current?.focus(), 50)
+    if (modal.kind === 'milestone') setTimeout(() => milestoneLabelRef.current?.focus(), 50)
   }, [modal])
 
   async function load() {
     setLoading(true)
     setPageError(null)
 
-    const [acctRes, snapRes, contribRes] = await Promise.all([
+    const [acctRes, snapRes, contribRes, milestoneRes] = await Promise.all([
       supabase.from('net_worth_accounts').select('*').eq('active', true).order('sort_order', { ascending: true, nullsFirst: false }).order('created_at'),
       supabase.from('net_worth_snapshots').select('*').order('snapshot_date', { ascending: false }),
       supabase.from('investment_contributions').select('*').is('end_date', null).order('created_at'),
+      supabase.from('net_worth_milestones').select('*').order('target_amount'),
     ])
 
     if (acctRes.error) { setPageError(acctRes.error.message); setLoading(false); return }
@@ -170,6 +180,7 @@ export default function NetWorthSettings() {
 
     setAccounts(accts.filter(a => !a.closed).map(toMeta))
     setClosedAccounts(accts.filter(a => a.closed).map(toMeta))
+    setMilestones((milestoneRes.data ?? []) as NetWorthMilestone[])
     setLoading(false)
   }
 
@@ -306,6 +317,46 @@ export default function NetWorthSettings() {
     setModal(null); await load()
   }
 
+  function openAddMilestone() {
+    setMilestoneLabel(''); setMilestoneAmount(''); setModalError(null)
+    setModal({ kind: 'milestone', target: null })
+  }
+
+  function openEditMilestone(m: NetWorthMilestone) {
+    setMilestoneLabel(m.label)
+    setMilestoneAmount(String(m.target_amount))
+    setModalError(null)
+    setModal({ kind: 'milestone', target: m })
+  }
+
+  async function saveMilestone() {
+    if (modal?.kind !== 'milestone') return
+    const label = milestoneLabel.trim()
+    const amount = parseFloat(milestoneAmount)
+    if (!label) { setModalError('Enter a milestone name.'); return }
+    if (isNaN(amount) || amount <= 0) { setModalError('Enter a valid target amount.'); return }
+    setSaving(true); setModalError(null)
+
+    if (modal.target) {
+      const { error } = await supabase.from('net_worth_milestones')
+        .update({ label, target_amount: amount })
+        .eq('id', modal.target.id)
+      if (error) { setSaving(false); setModalError(error.message); return }
+    } else {
+      const { error } = await supabase.from('net_worth_milestones')
+        .insert({ label, target_amount: amount })
+      if (error) { setSaving(false); setModalError(error.message); return }
+    }
+
+    setSaving(false); closeModal(); await load()
+  }
+
+  async function deleteMilestone(id: string) {
+    const { error } = await supabase.from('net_worth_milestones').delete().eq('id', id)
+    if (error) { setPageError(error.message); return }
+    setModal(null); await load()
+  }
+
   async function handleReorder(reordered: AccountWithMeta[]) {
     const ids = new Set(reordered.map(r => r.account.id))
     setAccounts([...accounts.filter(r => !ids.has(r.account.id)), ...reordered])
@@ -430,6 +481,65 @@ export default function NetWorthSettings() {
           )}
         </div>
       )}
+
+      {/* ── Milestones ── */}
+      <div className="mt-10">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-ink">Milestones</h2>
+            <p className="text-xs text-ink-muted mt-0.5">
+              Net worth targets shown as reference lines on your chart.
+            </p>
+          </div>
+          <button
+            onClick={openAddMilestone}
+            className="px-3 py-1.5 text-xs font-medium bg-terra text-white rounded-[10px] shadow-terra hover:opacity-90 transition-opacity"
+          >
+            + Add Milestone
+          </button>
+        </div>
+
+        {milestones.length === 0 ? (
+          <div className="rounded-[18px] border border-dashed border-border bg-surface px-6 py-8 text-center">
+            <p className="text-sm text-ink-muted">No milestones yet.</p>
+            <p className="mt-1 text-xs text-ink-faint">
+              Add a target amount — it will appear as a dashed line on your Net Worth chart.
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-[18px] border border-border bg-surface shadow-card overflow-hidden divide-y divide-border">
+            {milestones.map(m => (
+              <div key={m.id} className="px-5 py-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--violet)' }} />
+                  <div className="min-w-0">
+                    <span className="text-sm font-medium text-ink">{m.label}</span>
+                    <span className="ml-2 text-sm text-ink-muted num">
+                      {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(m.target_amount)}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => openEditMilestone(m)}
+                    className="p-1.5 text-ink-faint hover:text-ink transition-colors"
+                    title="Edit"
+                  >
+                    <PencilIcon />
+                  </button>
+                  <button
+                    onClick={() => setModal({ kind: 'deleteMilestone', target: m })}
+                    className="p-1.5 text-ink-faint hover:text-red transition-colors"
+                    title="Delete"
+                  >
+                    <TrashIcon />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* ── Modals ── */}
 
@@ -633,6 +743,75 @@ export default function NetWorthSettings() {
               className="px-4 py-2 text-sm font-medium bg-terra text-white rounded-[10px] shadow-terra hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
             >
               {saving ? 'Saving…' : 'Log Balance'}
+            </button>
+          </div>
+        </ModalShell>
+      )}
+
+      {modal?.kind === 'milestone' && (
+        <ModalShell
+          title={modal.target ? 'Edit Milestone' : 'Add Milestone'}
+          onClose={closeModal}
+        >
+          <div>
+            <label className={LABEL}>Milestone name</label>
+            <input
+              ref={milestoneLabelRef}
+              type="text"
+              placeholder="e.g. $100k, First $500k"
+              value={milestoneLabel}
+              onChange={e => setMilestoneLabel(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && saveMilestone()}
+              className={FIELD}
+            />
+          </div>
+          <div>
+            <label className={LABEL}>Target amount</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-faint">$</span>
+              <input
+                type="number"
+                min="1"
+                step="1000"
+                placeholder="100000"
+                value={milestoneAmount}
+                onChange={e => setMilestoneAmount(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && saveMilestone()}
+                className={FIELD + ' pl-6'}
+              />
+            </div>
+          </div>
+          {modalError && <p className="text-xs text-red">{modalError}</p>}
+          <div className="flex justify-end gap-2 pt-1">
+            <button onClick={closeModal} className="px-4 py-2 text-sm text-ink-muted hover:text-ink transition-colors">
+              Cancel
+            </button>
+            <button
+              onClick={saveMilestone}
+              disabled={saving || !milestoneLabel.trim() || !milestoneAmount}
+              className="px-4 py-2 text-sm font-medium bg-terra text-white rounded-[10px] shadow-terra hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+            >
+              {saving ? 'Saving…' : modal.target ? 'Save Changes' : 'Add Milestone'}
+            </button>
+          </div>
+        </ModalShell>
+      )}
+
+      {modal?.kind === 'deleteMilestone' && (
+        <ModalShell title="Delete Milestone?" onClose={closeModal}>
+          <p className="text-sm text-ink-muted">
+            Remove <strong className="text-ink">{modal.target.label}</strong> from your chart?
+            This can't be undone.
+          </p>
+          <div className="flex justify-end gap-2 pt-1">
+            <button onClick={closeModal} className="px-4 py-2 text-sm text-ink-muted hover:text-ink transition-colors">
+              Cancel
+            </button>
+            <button
+              onClick={() => deleteMilestone(modal.target.id)}
+              className="px-4 py-2 text-sm font-medium bg-red text-white rounded-[10px] hover:opacity-90 transition-opacity"
+            >
+              Delete
             </button>
           </div>
         </ModalShell>

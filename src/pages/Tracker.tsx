@@ -35,25 +35,25 @@ const TYPE_ORDER: Record<TransactionType, number> = { income: 0, expense: 1, sav
 const TYPE_BADGE_BG: Record<TransactionType, string> = {
   income:  'bg-forest-soft text-forest',
   expense: 'bg-red-soft    text-red',
-  savings: 'bg-terra-soft  text-terra',
+  savings: 'bg-teal-soft   text-teal',
 }
 
 const TYPE_BADGE_DOT: Record<TransactionType, string> = {
   income:  'bg-forest',
   expense: 'bg-red',
-  savings: 'bg-terra',
+  savings: 'bg-teal',
 }
 
 const AMOUNT_COLOR: Record<TransactionType, string> = {
   income:  'text-forest',
   expense: 'text-red',
-  savings: 'text-terra',
+  savings: 'text-teal',
 }
 
 const BAR_COLOR: Record<TransactionType, string> = {
   income:  'bg-forest',
   expense: 'bg-red',
-  savings: 'bg-terra',
+  savings: 'bg-teal',
 }
 
 // Active type-filter chip — soft tint per type; "all" uses ink/bg inversion
@@ -61,7 +61,7 @@ const TYPE_PILL_ON: Record<string, string> = {
   all:     'bg-ink text-bg',
   expense: 'bg-red-soft    text-red',
   income:  'bg-forest-soft text-forest',
-  savings: 'bg-terra-soft  text-terra',
+  savings: 'bg-teal-soft   text-teal',
 }
 
 const TYPE_PILL_OFF =

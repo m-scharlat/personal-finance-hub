@@ -66,6 +66,13 @@ export interface NetWorthSnapshot {
   created_at: string
 }
 
+export interface NetWorthMilestone {
+  id: string
+  target_amount: number
+  label: string
+  created_at: string
+}
+
 export interface InvestmentContribution {
   id: string
   account_id: string
