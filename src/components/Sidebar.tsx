@@ -1,6 +1,9 @@
 import { NavLink } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
+
+const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL as string
 
 // Three-stone Cairn mark — 64×64 viewBox, scaled via width/height
 // variant="color": terra/forest/amber; variant="mono": all white (for terra tile)
@@ -29,6 +32,7 @@ const Icon = ({ children }: { children: React.ReactNode }) => (
 )
 
 const NetWorthIcon     = () => <Icon><path d="M3 13h10M5 13V8M8 13V4M11 13V9" /></Icon>
+const AdminIcon        = () => <Icon><circle cx="8" cy="5" r="2.5"/><path d="M3 13c0-2.76 2.24-5 5-5s5 2.24 5 5"/><path d="M11.5 9.5l1 1 2-2"/></Icon>
 const DashboardIcon    = () => <Icon><rect x="2.5" y="2.5" width="5" height="5" rx="1"/><rect x="8.5" y="2.5" width="5" height="5" rx="1"/><rect x="2.5" y="8.5" width="5" height="5" rx="1"/><rect x="8.5" y="8.5" width="5" height="5" rx="1"/></Icon>
 const TransactionsIcon = () => <Icon><path d="M3 5h7l-2-2M13 11H6l2 2" /></Icon>
 const ImportIcon       = () => <Icon><path d="M8 2v8M5 7l3 3 3-3M3 13h10" /></Icon>
@@ -54,20 +58,24 @@ const manageItems: NavItemDef[] = [
 
 export default function Sidebar() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
-  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const { session } = useAuth()
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUserEmail(data.user?.email ?? null)
-    })
-  }, [])
+  const user       = session?.user
+  const name       = user?.user_metadata?.full_name as string | undefined
+  const avatarUrl  = user?.user_metadata?.avatar_url as string | undefined
+  const email      = user?.email
+  const isAdmin    = email === ADMIN_EMAIL
+  const initials   = name ? name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+                          : email ? email.slice(0, 2).toUpperCase() : '—'
 
   function toggleTheme(to: 'light' | 'dark') {
     document.documentElement.classList.toggle('dark', to === 'dark')
     setDark(to === 'dark')
   }
 
-  const initials = userEmail ? userEmail.slice(0, 2).toUpperCase() : '—'
+  async function signOut() {
+    await supabase.auth.signOut()
+  }
 
   return (
     <aside className="w-[260px] shrink-0 flex flex-col gap-0.5 px-3 py-[22px] bg-bg border-r border-border">
@@ -100,21 +108,45 @@ export default function Sidebar() {
       <SectionLabel className="mt-[18px]">Manage</SectionLabel>
       {manageItems.map(item => <SidebarItem key={item.to} item={item} />)}
 
+      {/* Admin — only visible to the app admin */}
+      {isAdmin && (
+        <>
+          <SectionLabel className="mt-[18px]">Admin</SectionLabel>
+          <SidebarItem item={{ to: '/admin', label: 'Admin', Icon: AdminIcon }} />
+        </>
+      )}
+
       {/* Footer */}
       <div className="mt-auto pt-4 px-1.5 flex flex-col gap-3">
         {/* User chip */}
         <div className="flex items-center gap-2 px-2.5 py-2 rounded-xl bg-surface border border-border shadow-card">
-          <div
-            className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-white text-[11px] font-semibold"
-            style={{ background: 'linear-gradient(135deg, var(--terra), var(--forest))' }}
-          >
-            {initials}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[12.5px] font-medium text-ink truncate">
-              {userEmail ?? '—'}
+          {/* Avatar — Google photo or gradient initials fallback */}
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt={name ?? email ?? ''}
+              className="w-7 h-7 rounded-full shrink-0 object-cover"
+            />
+          ) : (
+            <div
+              className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-white text-[11px] font-semibold"
+              style={{ background: 'linear-gradient(135deg, var(--terra), var(--forest))' }}
+            >
+              {initials}
             </div>
+          )}
+
+          {/* Name + email */}
+          <div className="flex-1 min-w-0">
+            <div className="text-[12.5px] font-medium text-ink truncate leading-tight">
+              {name ?? email ?? '—'}
+            </div>
+            {name && email && (
+              <div className="text-[10.5px] text-ink-faint truncate leading-tight">{email}</div>
+            )}
           </div>
+
+          {/* Theme toggle */}
           <button
             onClick={() => toggleTheme(dark ? 'light' : 'dark')}
             className="shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-ink-muted hover:text-ink hover:bg-surface-alt transition-colors"
@@ -124,6 +156,17 @@ export default function Sidebar() {
               ? <svg width={13} height={13} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="3.5"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06"/></svg>
               : <svg width={13} height={13} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z"/></svg>
             }
+          </button>
+
+          {/* Sign out */}
+          <button
+            onClick={signOut}
+            className="shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-ink-muted hover:text-red hover:bg-red-soft transition-colors"
+            aria-label="Sign out"
+          >
+            <svg width={13} height={13} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3M10 11l3-3-3-3M13 8H6" />
+            </svg>
           </button>
         </div>
       </div>

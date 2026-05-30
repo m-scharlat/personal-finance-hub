@@ -185,3 +185,83 @@ ALTER TABLE net_worth_milestones ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "anon_all_net_worth_milestones"
   ON net_worth_milestones FOR ALL USING (true) WITH CHECK (true);
+
+-- ============================================================
+-- Migration: Auth — Google OAuth + per-user RLS
+-- Run these in order in the Supabase SQL editor.
+-- ============================================================
+
+-- Part 1: Add user_id columns + auto-set triggers
+-- Safe to run while the app is live.
+
+ALTER TABLE transactions             ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+ALTER TABLE categories               ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+ALTER TABLE import_mappings          ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+ALTER TABLE net_worth_accounts       ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+ALTER TABLE net_worth_snapshots      ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+ALTER TABLE investment_contributions ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+ALTER TABLE net_worth_milestones     ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+
+CREATE OR REPLACE FUNCTION set_user_id()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.user_id = auth.uid();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER set_user_id_transactions
+  BEFORE INSERT ON transactions FOR EACH ROW EXECUTE FUNCTION set_user_id();
+CREATE TRIGGER set_user_id_categories
+  BEFORE INSERT ON categories FOR EACH ROW EXECUTE FUNCTION set_user_id();
+CREATE TRIGGER set_user_id_import_mappings
+  BEFORE INSERT ON import_mappings FOR EACH ROW EXECUTE FUNCTION set_user_id();
+CREATE TRIGGER set_user_id_net_worth_accounts
+  BEFORE INSERT ON net_worth_accounts FOR EACH ROW EXECUTE FUNCTION set_user_id();
+CREATE TRIGGER set_user_id_net_worth_snapshots
+  BEFORE INSERT ON net_worth_snapshots FOR EACH ROW EXECUTE FUNCTION set_user_id();
+CREATE TRIGGER set_user_id_investment_contributions
+  BEFORE INSERT ON investment_contributions FOR EACH ROW EXECUTE FUNCTION set_user_id();
+CREATE TRIGGER set_user_id_net_worth_milestones
+  BEFORE INSERT ON net_worth_milestones FOR EACH ROW EXECUTE FUNCTION set_user_id();
+
+-- Part 2: Claim existing rows (run once after first login)
+
+-- DO $$
+-- DECLARE owner_id UUID;
+-- BEGIN
+--   SELECT id INTO owner_id FROM auth.users LIMIT 1;
+--   UPDATE transactions             SET user_id = owner_id WHERE user_id IS NULL;
+--   UPDATE categories               SET user_id = owner_id WHERE user_id IS NULL;
+--   UPDATE import_mappings          SET user_id = owner_id WHERE user_id IS NULL;
+--   UPDATE net_worth_accounts       SET user_id = owner_id WHERE user_id IS NULL;
+--   UPDATE net_worth_milestones     SET user_id = owner_id WHERE user_id IS NULL;
+--   UPDATE net_worth_snapshots s    SET user_id = a.user_id FROM net_worth_accounts a WHERE s.account_id = a.id AND s.user_id IS NULL;
+--   UPDATE investment_contributions ic SET user_id = a.user_id FROM net_worth_accounts a WHERE ic.account_id = a.id AND ic.user_id IS NULL;
+-- END;
+-- $$;
+
+-- Part 3: Replace anon policies with per-user policies
+
+DROP POLICY IF EXISTS "anon_all_transactions"             ON transactions;
+DROP POLICY IF EXISTS "anon_all_categories"               ON categories;
+DROP POLICY IF EXISTS "anon_all_import_mappings"          ON import_mappings;
+DROP POLICY IF EXISTS "anon_all_net_worth_accounts"       ON net_worth_accounts;
+DROP POLICY IF EXISTS "anon_all_net_worth_snapshots"      ON net_worth_snapshots;
+DROP POLICY IF EXISTS "anon_all_investment_contributions" ON investment_contributions;
+DROP POLICY IF EXISTS "anon_all_net_worth_milestones"     ON net_worth_milestones;
+
+CREATE POLICY "owner_transactions" ON transactions
+  FOR ALL USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+CREATE POLICY "owner_categories" ON categories
+  FOR ALL USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+CREATE POLICY "owner_import_mappings" ON import_mappings
+  FOR ALL USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+CREATE POLICY "owner_net_worth_accounts" ON net_worth_accounts
+  FOR ALL USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+CREATE POLICY "owner_net_worth_snapshots" ON net_worth_snapshots
+  FOR ALL USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+CREATE POLICY "owner_investment_contributions" ON investment_contributions
+  FOR ALL USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+CREATE POLICY "owner_net_worth_milestones" ON net_worth_milestones
+  FOR ALL USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());

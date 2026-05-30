@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useState } from 'react'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Sidebar from './components/Sidebar'
 import Dashboard from './pages/Dashboard'
 import Tracker from './pages/Tracker'
@@ -8,6 +9,8 @@ import NetWorth from './pages/NetWorth'
 import Categories from './pages/settings/Categories'
 import ImportMappings from './pages/settings/ImportMappings'
 import NetWorthSettings from './pages/settings/NetWorth'
+import Login from './pages/Login'
+import Admin from './pages/Admin'
 
 function ChevronLeftIcon() {
   return (
@@ -18,7 +21,16 @@ function ChevronLeftIcon() {
 }
 
 
-export default function App() {
+function AppShell() {
+  const { session, loading } = useAuth()
+
+  if (loading) return <div className="min-h-screen bg-bg" />
+  if (!session) return <Login />
+
+  return <AuthenticatedApp />
+}
+
+function AuthenticatedApp() {
   const [sidebarOpen, setSidebarOpen] = useState(() =>
     localStorage.getItem('sidebarOpen') !== 'false'
   )
@@ -32,7 +44,6 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-bg font-sans overflow-hidden">
-
       {/* Sidebar wrapper — flex so aside stretches to full height inside */}
       <div className="relative shrink-0 flex">
         {/* Width-animated clip around sidebar */}
@@ -83,9 +94,18 @@ export default function App() {
           <Route path="/settings/categories" element={<Categories />} />
           <Route path="/settings/import-mappings" element={<ImportMappings />} />
           <Route path="/settings/net-worth"       element={<NetWorthSettings />} />
+          <Route path="/admin"                    element={<Admin />} />
         </Routes>
       </main>
 
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
   )
 }
