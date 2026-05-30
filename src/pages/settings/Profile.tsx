@@ -44,7 +44,10 @@ export default function ProfileSettings() {
 
   function setTheme(to: 'light' | 'dark') {
     document.documentElement.classList.toggle('dark', to === 'dark')
+    localStorage.setItem('cairn_theme', to)
     setDark(to === 'dark')
+    const userId = session?.user.id
+    if (userId) supabase.from('profiles').update({ theme: to }).eq('id', userId)
   }
 
   function handleRestartTour() {

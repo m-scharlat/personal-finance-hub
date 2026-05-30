@@ -22,6 +22,18 @@ async function checkInvite(email: string): Promise<boolean> {
   }
 }
 
+async function applyTheme(userId: string) {
+  const { data } = await supabase
+    .from('profiles')
+    .select('theme')
+    .eq('id', userId)
+    .single()
+  if (data?.theme) {
+    document.documentElement.classList.toggle('dark', data.theme === 'dark')
+    localStorage.setItem('cairn_theme', data.theme)
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
@@ -34,6 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const allowed = await checkInvite(data.session.user.email!)
           if (allowed) {
             setSession(data.session)
+            applyTheme(data.session.user.id)
           } else {
             await supabase.auth.signOut()
           }
@@ -51,6 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const allowed = await checkInvite(session.user.email!)
         if (allowed) {
           setSession(session)
+          applyTheme(session.user.id)
           supabase
             .from('profiles')
             .update({ last_login_at: new Date().toISOString() })
