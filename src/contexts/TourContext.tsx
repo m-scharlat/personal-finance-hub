@@ -1,4 +1,5 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase'
 
 export interface TourStep {
   route:        string | null
@@ -81,15 +82,54 @@ const TourContext = createContext<TourContextValue>({
 })
 
 export function TourProvider({ children }: { children: React.ReactNode }) {
-  const [active, setActive] = useState(() => !localStorage.getItem(STORAGE_KEY))
+  const [active, setActive] = useState(false)
   const [step,   setStep]   = useState(0)
+
+  useEffect(() => {
+    // Fast path: localStorage cache says done — skip Supabase round-trip
+    if (localStorage.getItem(STORAGE_KEY) === 'true') return
+
+    async function check() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('tour_completed')
+        .eq('id', user.id)
+        .single()
+      if (error) {
+        // Column missing or query failed — fall back to localStorage-only behaviour
+        if (!localStorage.getItem(STORAGE_KEY)) setActive(true)
+        return
+      }
+      if (!data.tour_completed) {
+        setActive(true)
+      } else {
+        localStorage.setItem(STORAGE_KEY, 'true')
+      }
+    }
+    check()
+  }, [])
+
+  async function markDone() {
+    localStorage.setItem(STORAGE_KEY, 'true')
+    setActive(false)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) supabase.from('profiles').update({ tour_completed: true }).eq('id', user.id)
+  }
+
+  async function restart() {
+    localStorage.removeItem(STORAGE_KEY)
+    setStep(0)
+    setActive(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) supabase.from('profiles').update({ tour_completed: false }).eq('id', user.id)
+  }
 
   function advance() { setStep(s => Math.min(s + 1, TOUR_STEPS.length - 1)) }
   function back()    { setStep(s => Math.max(s - 1, 0)) }
-
-  function complete() { localStorage.setItem(STORAGE_KEY, 'true'); setActive(false) }
-  function skip()     { localStorage.setItem(STORAGE_KEY, 'true'); setActive(false) }
-  function restart()  { localStorage.removeItem(STORAGE_KEY); setStep(0); setActive(true) }
+  function complete() { markDone() }
+  function skip()     { markDone() }
 
   return (
     <TourContext.Provider value={{ active, step, totalSteps: TOUR_STEPS.length, advance, back, complete, skip, restart }}>
