@@ -3,7 +3,8 @@ import { NavLink } from 'react-router-dom'
 const LINKS = [
   { to: '/settings/net-worth',       label: 'Accounts'        },
   { to: '/settings/categories',      label: 'Categories'      },
-  { to: '/settings/import-mappings', label: 'Import Mappings' },
+  { to: '/settings/import-mappings', label: 'Import'          },
+  { to: '/settings/profile',         label: 'Profile'         },
 ]
 
 export default function SettingsNav() {

@@ -8,6 +8,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '../../lib/supabase'
+import { useTourHighlight } from '../../contexts/TourContext'
 import { formatCurrency, formatDate } from '../../lib/format'
 import SettingsNav from '../../components/SettingsNav'
 import type { AccountType, InvestmentContribution, NetWorthAccount, NetWorthMilestone, NetWorthSnapshot, Recurrence } from '../../types'
@@ -102,6 +103,7 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
 export default function NetWorthSettings() {
   const d = new Date()
   const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const highlightAddAccount = useTourHighlight('tour-add-account')
 
   const [accounts, setAccounts]             = useState<AccountWithMeta[]>([])
   const [closedAccounts, setClosedAccounts] = useState<AccountWithMeta[]>([])
@@ -392,8 +394,9 @@ export default function NetWorthSettings() {
           </p>
         </div>
         <button
+          id="tour-add-account"
           onClick={openAddAccount}
-          className="px-3 py-1.5 text-xs font-medium bg-terra text-white rounded-[10px] shadow-terra hover:opacity-90 transition-opacity"
+          className={`px-3 py-1.5 text-xs font-medium bg-terra text-white rounded-[10px] shadow-terra hover:opacity-90 transition-opacity${highlightAddAccount ? ' tour-highlight' : ''}`}
         >
           + Add Account
         </button>

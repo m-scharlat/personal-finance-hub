@@ -104,3 +104,10 @@ body {
 
 /* Tabular figures helper — apply to every monetary value */
 .num { font-variant-numeric: tabular-nums; }
+
+/* Tour highlight — terra outline ring applied to target elements during guided tour */
+.tour-highlight {
+  outline: 2px solid var(--terra);
+  outline-offset: 3px;
+  border-radius: inherit;
+}

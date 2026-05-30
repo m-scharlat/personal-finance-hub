@@ -1,16 +1,20 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, Suspense, lazy } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Sidebar from './components/Sidebar'
-import Dashboard from './pages/Dashboard'
-import Tracker from './pages/Tracker'
-import Import from './pages/Import'
-import NetWorth from './pages/NetWorth'
-import Categories from './pages/settings/Categories'
-import ImportMappings from './pages/settings/ImportMappings'
-import NetWorthSettings from './pages/settings/NetWorth'
 import Login from './pages/Login'
-import Admin from './pages/Admin'
+import { TourProvider } from './contexts/TourContext'
+import TourCard from './components/TourCard'
+
+const Dashboard      = lazy(() => import('./pages/Dashboard'))
+const Tracker        = lazy(() => import('./pages/Tracker'))
+const Import         = lazy(() => import('./pages/Import'))
+const NetWorth       = lazy(() => import('./pages/NetWorth'))
+const Categories     = lazy(() => import('./pages/settings/Categories'))
+const ImportMappings = lazy(() => import('./pages/settings/ImportMappings'))
+const NetWorthSettings = lazy(() => import('./pages/settings/NetWorth'))
+const ProfileSettings  = lazy(() => import('./pages/settings/Profile'))
+const Admin            = lazy(() => import('./pages/Admin'))
 
 function ChevronLeftIcon() {
   return (
@@ -35,6 +39,7 @@ function AuthenticatedApp() {
     localStorage.getItem('sidebarOpen') !== 'false'
   )
 
+
   function toggleSidebar() {
     setSidebarOpen(prev => {
       localStorage.setItem('sidebarOpen', String(!prev))
@@ -43,6 +48,7 @@ function AuthenticatedApp() {
   }
 
   return (
+    <TourProvider>
     <div className="flex h-screen bg-bg font-sans overflow-hidden">
       {/* Sidebar wrapper — flex so aside stretches to full height inside */}
       <div className="relative shrink-0 flex">
@@ -84,6 +90,7 @@ function AuthenticatedApp() {
       )}
 
       <main className="flex-1 min-w-0 overflow-auto">
+        <Suspense fallback={<div className="min-h-screen bg-bg" />}>
         <Routes>
           <Route path="/" element={<Navigate to="/net-worth" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
@@ -94,11 +101,15 @@ function AuthenticatedApp() {
           <Route path="/settings/categories" element={<Categories />} />
           <Route path="/settings/import-mappings" element={<ImportMappings />} />
           <Route path="/settings/net-worth"       element={<NetWorthSettings />} />
+          <Route path="/settings/profile"         element={<ProfileSettings />} />
           <Route path="/admin"                    element={<Admin />} />
         </Routes>
+        </Suspense>
       </main>
 
     </div>
+    <TourCard />
+    </TourProvider>
   )
 }
 

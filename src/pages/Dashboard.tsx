@@ -72,35 +72,21 @@ export default function Dashboard() {
     let cancelled = false
     async function load() {
       setLoading(true)
+      setCompLoading(true)
       setError(null)
-      const { data, error: err } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('year', selectedYear)
+      const [{ data, error: err }, { data: compData }] = await Promise.all([
+        supabase.from('transactions').select('*').eq('year', selectedYear),
+        supabase.from('transactions').select('*').eq('year', selectedYear - 1),
+      ])
       if (!cancelled) {
         if (err) setError(err.message)
         else setTransactions(data ?? [])
+        setCompTransactions(compData ?? [])
         setLoading(false)
+        setCompLoading(false)
       }
     }
     load()
-    return () => { cancelled = true }
-  }, [selectedYear])
-
-  // Fetch previous year for YoY comparison
-  useEffect(() => {
-    let cancelled = false
-    setCompLoading(true)
-    supabase
-      .from('transactions')
-      .select('*')
-      .eq('year', selectedYear - 1)
-      .then(({ data }) => {
-        if (!cancelled) {
-          setCompTransactions(data ?? [])
-          setCompLoading(false)
-        }
-      })
     return () => { cancelled = true }
   }, [selectedYear])
 

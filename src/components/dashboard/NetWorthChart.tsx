@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo } from 'react'
-import { motion } from 'framer-motion'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../lib/format'
@@ -386,11 +385,7 @@ export default function NetWorthChart() {
               }`}
             >
               {horizon === h && (
-                <motion.div
-                  layoutId="horizon-active"
-                  className="absolute inset-0 bg-terra rounded-[8px] shadow-sm"
-                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                />
+                <span className="absolute inset-0 bg-terra rounded-[8px] shadow-sm" />
               )}
               <span className="relative z-10">
                 {h === 'history' ? 'History' : h.toUpperCase()}

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { formatCurrency, formatDate } from '../lib/format'
 import TransactionModal from '../components/TransactionModal'
 import type { Transaction, TransactionType } from '../types'
+import { useTourHighlight } from '../contexts/TourContext'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -276,6 +277,7 @@ function NetSavingsCard({
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Tracker() {
+  const highlightAddTransaction = useTourHighlight('tour-add-transaction')
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState<string | null>(null)
@@ -488,8 +490,9 @@ export default function Tracker() {
             </p>
           </div>
           <button
+            id="tour-add-transaction"
             onClick={openAdd}
-            className="px-[14px] py-[9px] text-[13px] font-medium bg-terra text-white rounded-[10px] hover:opacity-90 transition-opacity shadow-terra"
+            className={`px-[14px] py-[9px] text-[13px] font-medium bg-terra text-white rounded-[10px] hover:opacity-90 transition-opacity shadow-terra${highlightAddTransaction ? ' tour-highlight' : ''}`}
           >
             + Add Transaction
           </button>

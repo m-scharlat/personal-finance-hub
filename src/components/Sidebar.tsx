@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
 const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL as string
+
 
 // Three-stone Cairn mark — 64×64 viewBox, scaled via width/height
 // variant="color": terra/forest/amber; variant="mono": all white (for terra tile)
@@ -60,18 +61,21 @@ export default function Sidebar() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
   const { session } = useAuth()
 
-  const user       = session?.user
-  const name       = user?.user_metadata?.full_name as string | undefined
-  const avatarUrl  = user?.user_metadata?.avatar_url as string | undefined
-  const email      = user?.email
-  const isAdmin    = email === ADMIN_EMAIL
-  const initials   = name ? name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
-                          : email ? email.slice(0, 2).toUpperCase() : '—'
+  useEffect(() => {
+    const observer = new MutationObserver(() =>
+      setDark(document.documentElement.classList.contains('dark'))
+    )
+    observer.observe(document.documentElement, { attributeFilter: ['class'] })
+    return () => observer.disconnect()
+  }, [])
 
-  function toggleTheme(to: 'light' | 'dark') {
-    document.documentElement.classList.toggle('dark', to === 'dark')
-    setDark(to === 'dark')
-  }
+  const user      = session?.user
+  const name      = user?.user_metadata?.full_name as string | undefined
+  const avatarUrl = user?.user_metadata?.avatar_url as string | undefined
+  const email     = user?.email
+  const isAdmin   = email === ADMIN_EMAIL
+  const initials  = name ? name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+                         : email ? email.slice(0, 2).toUpperCase() : '—'
 
   async function signOut() {
     await supabase.auth.signOut()
@@ -117,48 +121,37 @@ export default function Sidebar() {
       )}
 
       {/* Footer */}
-      <div className="mt-auto pt-4 px-1.5 flex flex-col gap-3">
-        {/* User chip */}
+      <div className="mt-auto pt-4 px-1.5">
+        {/* User chip — avatar+name links to Profile settings, sign out stays accessible */}
         <div className="flex items-center gap-2 px-2.5 py-2 rounded-xl bg-surface border border-border shadow-card">
-          {/* Avatar — Google photo or gradient initials fallback */}
-          {avatarUrl ? (
-            <img
-              src={avatarUrl}
-              alt={name ?? email ?? ''}
-              className="w-7 h-7 rounded-full shrink-0 object-cover"
-            />
-          ) : (
-            <div
-              className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-white text-[11px] font-semibold"
-              style={{ background: 'linear-gradient(135deg, var(--terra), var(--forest))' }}
-            >
-              {initials}
-            </div>
-          )}
-
-          {/* Name + email */}
-          <div className="flex-1 min-w-0">
-            <div className="text-[12.5px] font-medium text-ink truncate leading-tight">
-              {name ?? email ?? '—'}
-            </div>
-            {name && email && (
-              <div className="text-[10.5px] text-ink-faint truncate leading-tight">{email}</div>
-            )}
-          </div>
-
-          {/* Theme toggle */}
-          <button
-            onClick={() => toggleTheme(dark ? 'light' : 'dark')}
-            className="shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-ink-muted hover:text-ink hover:bg-surface-alt transition-colors"
-            aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+          <NavLink
+            to="/settings/profile"
+            className="flex items-center gap-2 flex-1 min-w-0 hover:opacity-80 transition-opacity"
           >
-            {dark
-              ? <svg width={13} height={13} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="3.5"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06"/></svg>
-              : <svg width={13} height={13} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z"/></svg>
-            }
-          </button>
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={name ?? email ?? ''}
+                className="w-7 h-7 rounded-full shrink-0 object-cover"
+              />
+            ) : (
+              <div
+                className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-white text-[11px] font-semibold"
+                style={{ background: 'linear-gradient(135deg, var(--terra), var(--forest))' }}
+              >
+                {initials}
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="text-[12.5px] font-medium text-ink truncate leading-tight">
+                {name ?? email ?? '—'}
+              </div>
+              {name && email && (
+                <div className="text-[10.5px] text-ink-faint truncate leading-tight">{email}</div>
+              )}
+            </div>
+          </NavLink>
 
-          {/* Sign out */}
           <button
             onClick={signOut}
             className="shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-ink-muted hover:text-red hover:bg-red-soft transition-colors"

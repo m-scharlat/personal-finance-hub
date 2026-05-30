@@ -3,10 +3,11 @@ import { supabase } from '../lib/supabase'
 import { formatCurrency } from '../lib/format'
 import InfoTooltip from '../components/InfoTooltip'
 import type { Category, ImportMapping, TransactionType } from '../types'
+import { useTourHighlight } from '../contexts/TourContext'
 
 // ── Parser ────────────────────────────────────────────────────────────────
 
-const LINE_RE = /([+-])\s*(\d+)\$?\s+(.+)/
+const LINE_RE = /([+\-=])\s*(\d+)\$?\s+(.+)/
 
 interface ParsedRow {
   id: string
@@ -30,7 +31,14 @@ function suggestCategory(note: string, type: TransactionType, cats: Category[]):
   let name: string
   let confident = true
 
-  if (type === 'income') {
+  if (type === 'savings') {
+    if (/401k|four.?o.?one.?k/.test(s))                          name = '401k'
+    else if (/roth|ira/.test(s))                                  name = 'Roth IRA'
+    else if (/brokerage|invest|stock|etf|index|vanguard|fidelity|schwab/.test(s)) name = 'Investments'
+    else if (/emergency|rainy.?day/.test(s))                      name = 'Emergency Fund'
+    else if (/\bsaving/.test(s))                                  name = 'Savings'
+    else { name = 'Savings'; confident = false }
+  } else if (type === 'income') {
     if (/salary|wage/.test(s))                    name = 'Salary'
     else if (/freelance|consult|contract/.test(s)) name = 'Freelance'
     else if (/bonus/.test(s))                      name = 'Bonus'
@@ -63,7 +71,7 @@ function parseText(text: string, cats: Category[], mappings: ImportMapping[]): P
     .filter(Boolean)
     .map((m) => {
       const [, sign, amountStr, desc] = m!
-      const signType: TransactionType = sign === '+' ? 'income' : 'expense'
+      const signType: TransactionType = sign === '+' ? 'income' : sign === '=' ? 'savings' : 'expense'
       const note = desc.trim()
       const lowerNote = note.toLowerCase()
 
@@ -122,6 +130,7 @@ const TYPE_COLORS: Record<TransactionType, string> = {
 }
 
 export default function Import() {
+  const highlightImportInput = useTourHighlight('tour-import-input')
   const [step, setStep]             = useState<Step>('input')
   const [rawText, setRawText]       = useState('')
   const [month, setMonth]           = useState(now.getMonth() + 1)
@@ -236,7 +245,7 @@ export default function Import() {
       <div className="mb-6">
         <h1 className="text-[26px] font-semibold text-ink tracking-[-0.02em]">Import Transactions</h1>
         <p className="mt-1 text-sm text-ink-muted">
-          Paste your notes-app expense list to bulk import a month of transactions.
+          Paste your notes-app transaction list to bulk import a month of income, expenses, and savings.
         </p>
       </div>
 
@@ -335,12 +344,13 @@ export default function Import() {
               Paste your notes
             </label>
             <textarea
+              id="tour-import-input"
               value={rawText}
               onChange={(e) => { setRawText(e.target.value); setError(null) }}
               rows={16}
               spellCheck={false}
-              placeholder={"- 25 food\n- 100 amazon\n+ 2400 salary"}
-              className="w-full text-sm font-mono px-4 py-3 rounded-[18px] border border-border bg-surface text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-terra resize-y"
+              placeholder={"- 25 food\n- 100 amazon\n+ 2400 salary\n= 500 roth ira"}
+              className={`w-full text-sm font-mono px-4 py-3 rounded-[18px] border border-border bg-surface text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-terra resize-y${highlightImportInput ? ' tour-highlight' : ''}`}
             />
           </div>
 
@@ -357,11 +367,12 @@ export default function Import() {
               direction="up"
               text={
                 "One transaction per line:\n" +
-                "  - for expenses, + for income\n\n" +
+                "  - expenses  + income  = savings\n\n" +
                 "Examples:\n" +
-                "-25 coffee\n" +
-                "-120 electric bill\n" +
-                "+2400 salary\n\n" +
+                "- 25 coffee\n" +
+                "- 120 electric bill\n" +
+                "+ 2400 salary\n" +
+                "= 500 roth ira\n\n" +
                 "Descriptions are matched against your import mappings to auto-assign categories. Unmatched lines are flagged for review."
               }
             />
